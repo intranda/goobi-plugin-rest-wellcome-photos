@@ -6,10 +6,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import javax.ws.rs.HeaderParam;
 import javax.ws.rs.POST;
@@ -25,9 +24,7 @@ import org.goobi.beans.Processproperty;
 import org.goobi.beans.Step;
 import org.goobi.managedbeans.LoginBean;
 import org.goobi.production.flow.jobs.HistoryAnalyserJob;
-import org.jdom2.Namespace;
 
-import de.sub.goobi.config.ConfigurationHelper;
 import de.sub.goobi.helper.BeanHelper;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.ScriptThreadWithoutHibernate;
@@ -38,6 +35,7 @@ import de.sub.goobi.persistence.managers.ProcessManager;
 import de.sub.goobi.persistence.managers.PropertyManager;
 import de.sub.goobi.persistence.managers.StepManager;
 import lombok.extern.log4j.Log4j;
+import ugh.dl.ContentFile;
 import ugh.dl.DigitalDocument;
 import ugh.dl.DocStruct;
 import ugh.dl.Fileformat;
@@ -45,9 +43,9 @@ import ugh.dl.Metadata;
 import ugh.dl.MetadataType;
 import ugh.dl.Person;
 import ugh.dl.Prefs;
-import ugh.exceptions.DocStructHasNoTypeException;
 import ugh.exceptions.MetadataTypeNotAllowedException;
 import ugh.exceptions.PreferencesException;
+import ugh.exceptions.TypeNotAllowedAsChildException;
 import ugh.exceptions.TypeNotAllowedForParentException;
 import ugh.fileformats.mets.MetsMods;
 
@@ -55,35 +53,10 @@ import ugh.fileformats.mets.MetsMods;
 @Log4j
 public class WellcomeProcessCreation {
 
-    private static final String XSLT = ConfigurationHelper.getInstance().getXsltFolder() + "MARC21slim2MODS3.xsl";
-    private static final String MODS_MAPPING_FILE = ConfigurationHelper.getInstance().getXsltFolder() + "mods_map.xml";
-    private static final Namespace MARC = Namespace.getNamespace("marc", "http://www.loc.gov/MARC21/slim");
-
-    private Map<String, String> map = new HashMap<String, String>();
-
     private String currentIdentifier;
     private String currentWellcomeIdentifier;
 
-    public WellcomeProcessCreation() {
-        map.put("?Monographic", "Monograph");
-        map.put("?continuing", "Periodical"); // not mapped
-        map.put("?Notated music", "Monograph");
-        map.put("?Manuscript notated music", "Monograph");
-        map.put("?Cartographic material", "SingleMap");
-        map.put("?Manuscript cartographic material", "SingleMap");
-        map.put("?Projected medium", "Video");
-        map.put("?Nonmusical sound recording", "Audio");
-        map.put("?Musical sound recording", "Audio");
-        map.put("?Two-dimensional nonprojectable graphic", "Artwork");
-        map.put("?Computer file", "Monograph");
-        map.put("?Kit", "Monograph");
-        map.put("?Mixed materials", "Monograph");
-        map.put("?Three-dimensional artefact or naturally occurring object", "3DObject");
-        map.put("?Manuscript language material", "Archive");
-        map.put("?BoundManuscript", "BoundManuscript");
-    }
-
-    @javax.ws.rs.Path("/createeditorial")
+    @javax.ws.rs.Path("/createeditorials")
     @POST
     @Produces("text/xml")
     public Response createNewProcess(@HeaderParam("templateid") int templateId, @HeaderParam("hotfolder") String hotFolder) {
@@ -112,14 +85,15 @@ public class WellcomeProcessCreation {
                 try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(dir)) {
                     for (Path file : folderFiles) {
                         String fileName = file.getFileName().toString();
-                        if (fileName.endsWith(".csv")) {
+                        if (fileName.toLowerCase().endsWith(".csv")) {
                             csvFile = file;
                         }
-                        if (fileName.endsWith(".tif") || fileName.endsWith(".tiff")) {
+                        if (fileName.toLowerCase().endsWith(".tif") || fileName.toLowerCase().endsWith(".tiff")) {
                             tifFiles.add(file);
                         }
                     }
                 }
+                Collections.sort(tifFiles);
                 try {
                     WellcomeCreationProcess wcp = createProcess(csvFile, tifFiles, prefs, template);
                     if (wcp == null) {
@@ -130,6 +104,7 @@ public class WellcomeProcessCreation {
                     processes.add(wcp);
                 } catch (Exception e) {
                     //TODO: this should be collected and be returned as one at the end
+                    log.error(e);
                     return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Cannot import csv file: " + csvFile))
                             .build();
                 }
@@ -154,70 +129,47 @@ public class WellcomeProcessCreation {
         }
         Process process = cloneTemplate(template);
         // set title
-        process.setTitel(referenceNumber);//TODO remove whitespaces here?
+        process.setTitel(referenceNumber.replaceAll(" |\t", "_"));
 
         NeuenProzessAnlegen(process, template, ff, prefs);
 
-        saveProperty(process, "b-number", referenceNumber); //TODO remove whitespaces here?
+        saveProperty(process, "b-number", referenceNumber.replaceAll(" |\t", "_")); //TODO really remove whitespaces here? Get b-number from somewhere??
         saveProperty(process, "CollectionName1", "Editorial Photography"); //TODO
         saveProperty(process, "CollectionName2", referenceNumber); //TODO
         saveProperty(process, "securityTag", "open");
         saveProperty(process, "schemaName", "Millennium");
         saveProperty(process, "archiveStatus", referenceNumber.startsWith("CP") ? "archived" : "contemporary");
 
+        saveProperty(process, "Keywords", csv.getValue("People") + ", " + csv.getValue("Keywords"));
+        String creators = "";
+        String staff = csv.getValue("Staff Photog");
+        String freelance = csv.getValue("Freelance Photog");
+        if (staff != null && !staff.isEmpty()) {
+            creators = staff;
+            if (freelance != null && !freelance.isEmpty()) {
+                creators += "/" + freelance;
+            }
+        } else if (!freelance.isEmpty()) {
+            creators = freelance;
+        }
+        saveProperty(process, "Creators", creators);
+
+        //copy the files
+        Path processDir = Paths.get(process.getProcessDataDirectory());
+        Path importDir = processDir.resolve("import");
+        Files.createDirectories(importDir);
+        Files.copy(csvFile, importDir.resolve(csvFile.getFileName()));
+
+        Path imagesDir = Paths.get(process.getImagesOrigDirectory(false));
+        for (Path tifFile : tifFiles) {
+            Files.copy(tifFile, imagesDir.resolve(tifFile.getFileName()));
+        }
+
         WellcomeCreationProcess wcp = new WellcomeCreationProcess();
         wcp.setProcessId(process.getId());
         wcp.setProcessName(process.getTitel());
 
         return wcp;
-    }
-
-    private void generateDefaultValues(Prefs prefs, String collectionName, DocStruct dsRoot, DocStruct dsBoundBook)
-            throws MetadataTypeNotAllowedException {
-
-        // Add 'pathimagefiles'
-        try {
-            Metadata mdForPath = new Metadata(prefs.getMetadataTypeByName("pathimagefiles"));
-            mdForPath.setValue("./" + currentIdentifier);
-            dsBoundBook.addMetadata(mdForPath);
-        } catch (MetadataTypeNotAllowedException e1) {
-            log.error("MetadataTypeNotAllowedException while reading images", e1);
-        } catch (DocStructHasNoTypeException e1) {
-            log.error("DocStructHasNoTypeException while reading images", e1);
-        }
-
-        MetadataType mdTypeCollection = prefs.getMetadataTypeByName("singleDigCollection");
-
-        Metadata mdCollection = new Metadata(mdTypeCollection);
-        mdCollection.setValue(collectionName);
-        dsRoot.addMetadata(mdCollection);
-
-        Metadata dateDigitization = new Metadata(prefs.getMetadataTypeByName("_dateDigitization"));
-        dateDigitization.setValue("2012");
-        Metadata placeOfElectronicOrigin = new Metadata(prefs.getMetadataTypeByName("_placeOfElectronicOrigin"));
-        placeOfElectronicOrigin.setValue("Wellcome Trust");
-        Metadata _electronicEdition = new Metadata(prefs.getMetadataTypeByName("_electronicEdition"));
-        _electronicEdition.setValue("[Electronic ed.]");
-        Metadata _electronicPublisher = new Metadata(prefs.getMetadataTypeByName("_electronicPublisher"));
-        _electronicPublisher.setValue("Wellcome Trust");
-        Metadata _digitalOrigin = new Metadata(prefs.getMetadataTypeByName("_digitalOrigin"));
-        _digitalOrigin.setValue("reformatted digital");
-        if (dsRoot.getType().isAnchor()) {
-            DocStruct ds = dsRoot.getAllChildren().get(0);
-            ds.addMetadata(dateDigitization);
-            ds.addMetadata(_electronicEdition);
-
-        } else {
-            dsRoot.addMetadata(dateDigitization);
-            dsRoot.addMetadata(_electronicEdition);
-        }
-        dsRoot.addMetadata(placeOfElectronicOrigin);
-        dsRoot.addMetadata(_electronicPublisher);
-        dsRoot.addMetadata(_digitalOrigin);
-
-        Metadata physicalLocation = new Metadata(prefs.getMetadataTypeByName("_digitalOrigin"));
-        physicalLocation.setValue("Wellcome Trust");
-        dsBoundBook.addMetadata(physicalLocation);
     }
 
     private Fileformat convertData(CSVUtil csv, List<Path> tifFiles, Prefs prefs) {
@@ -239,7 +191,7 @@ public class WellcomeProcessCreation {
             md = new Metadata(prefs.getMetadataTypeByName("ShootType"));
             md.setValue(csv.getValue("Shoot Type"));
             dsRoot.addMetadata(md);
-            md = new Metadata(prefs.getMetadataTypeByName("CatalogIdDigital"));
+            md = new Metadata(prefs.getMetadataTypeByName("CatalogIDDigital"));
             md.setValue(csv.getValue("Reference"));
             dsRoot.addMetadata(md);
             md = new Metadata(prefs.getMetadataTypeByName("PlaceOfPublication"));
@@ -261,28 +213,64 @@ public class WellcomeProcessCreation {
             md.setValue(csv.getValue("Usage Terms"));
             dsRoot.addMetadata(md);
 
-            Person p = new Person(prefs.getMetadataTypeByName("Photographer"));
             String name = csv.getValue("Staff Photog");
-            int lastSpace = name.lastIndexOf(' ');
-            String firstName = name.substring(0, lastSpace);
-            String lastName = name.substring(lastSpace, name.length() - 1);
-            p.setFirstname(firstName);
-            p.setLastname(lastName);
-            dsRoot.addPerson(p);
+            if (!name.isEmpty()) {
+                Person p = new Person(prefs.getMetadataTypeByName("Photographer"));
+                int lastSpace = name.lastIndexOf(' ');
+                String firstName = name.substring(0, lastSpace);
+                String lastName = name.substring(lastSpace, name.length() - 1);
+                p.setFirstname(firstName);
+                p.setLastname(lastName);
+                dsRoot.addPerson(p);
+            }
 
-            p = new Person(prefs.getMetadataTypeByName("Creator"));
             name = csv.getValue("Freelance Photog");
-            lastSpace = name.lastIndexOf(' ');
-            firstName = name.substring(0, lastSpace);
-            lastName = name.substring(lastSpace, name.length() - 1);
-            p.setFirstname(firstName);
-            p.setLastname(lastName);
-            dsRoot.addPerson(p);
+            if (!name.isEmpty()) {
+                Person p = new Person(prefs.getMetadataTypeByName("Creator"));
+                int lastSpace = name.lastIndexOf(' ');
+                String firstName = name.substring(0, lastSpace);
+                String lastName = name.substring(lastSpace, name.length() - 1);
+                p.setFirstname(firstName);
+                p.setLastname(lastName);
+                dsRoot.addPerson(p);
+            }
 
             dd.setLogicalDocStruct(dsRoot);
 
             DocStruct dsBoundBook = dd.createDocStruct(prefs.getDocStrctTypeByName("BoundBook"));
-            //TODO add files to dsBoundBook
+            //TODO add files to dsBoundBook (correctly)
+            int pageNo = 0;
+            for (Path tifPath : tifFiles) {
+                DocStruct page = dd.createDocStruct(prefs.getDocStrctTypeByName("page"));
+                try {
+                    // physical page no
+                    dsBoundBook.addChild(page);
+                    MetadataType mdt = prefs.getMetadataTypeByName("physPageNumber");
+                    Metadata mdTemp = new Metadata(mdt);
+                    mdTemp.setValue(String.valueOf(pageNo));
+                    page.addMetadata(mdTemp);
+
+                    // logical page no
+                    mdt = prefs.getMetadataTypeByName("logicalPageNumber");
+                    mdTemp = new Metadata(mdt);
+
+                    mdTemp.setValue("uncounted");
+
+                    page.addMetadata(mdTemp);
+                    ContentFile cf = new ContentFile();
+
+                    cf.setLocation("file://" + tifPath.toAbsolutePath().toString());
+
+                    page.addContentFile(cf);
+
+                } catch (TypeNotAllowedAsChildException e) {
+                    log.error(e);
+                } catch (MetadataTypeNotAllowedException e) {
+                    log.error(e);
+                }
+                pageNo++;
+            }
+
             dd.setPhysicalDocStruct(dsBoundBook);
 
             // Collect MODS metadata
