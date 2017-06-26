@@ -83,7 +83,7 @@ public class WellcomeProcessCreation {
         map.put("?BoundManuscript", "BoundManuscript");
     }
 
-    @javax.ws.rs.Path("/create")
+    @javax.ws.rs.Path("/createeditorial")
     @POST
     @Produces("text/xml")
     public Response createNewProcess(@HeaderParam("templateid") int templateId, @HeaderParam("hotfolder") String hotFolder) {
@@ -163,10 +163,12 @@ public class WellcomeProcessCreation {
         saveProperty(process, "CollectionName2", referenceNumber); //TODO
         saveProperty(process, "securityTag", "open");
         saveProperty(process, "schemaName", "Millennium");
+        saveProperty(process, "archiveStatus", referenceNumber.startsWith("CP") ? "archived" : "contemporary");
 
         WellcomeCreationProcess wcp = new WellcomeCreationProcess();
         wcp.setProcessId(process.getId());
         wcp.setProcessName(process.getTitel());
+
         return wcp;
     }
 
@@ -259,9 +261,22 @@ public class WellcomeProcessCreation {
             md.setValue(csv.getValue("Usage Terms"));
             dsRoot.addMetadata(md);
 
-            Person p = new Person(prefs.getMetadataTypeByName("Creator"));
-            p.setFirstname("fn");
-            p.setLastname("ls");
+            Person p = new Person(prefs.getMetadataTypeByName("Photographer"));
+            String name = csv.getValue("Staff Photog");
+            int lastSpace = name.lastIndexOf(' ');
+            String firstName = name.substring(0, lastSpace);
+            String lastName = name.substring(lastSpace, name.length() - 1);
+            p.setFirstname(firstName);
+            p.setLastname(lastName);
+            dsRoot.addPerson(p);
+
+            p = new Person(prefs.getMetadataTypeByName("Creator"));
+            name = csv.getValue("Freelance Photog");
+            lastSpace = name.lastIndexOf(' ');
+            firstName = name.substring(0, lastSpace);
+            lastName = name.substring(lastSpace, name.length() - 1);
+            p.setFirstname(firstName);
+            p.setLastname(lastName);
             dsRoot.addPerson(p);
 
             dd.setLogicalDocStruct(dsRoot);
