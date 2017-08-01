@@ -133,7 +133,7 @@ public class WellcomeProcessCreation {
 
         NeuenProzessAnlegen(process, template, ff, prefs);
 
-        saveProperty(process, "b-number", referenceNumber.replaceAll(" |\t", "_")); //TODO really remove whitespaces here? Get b-number from somewhere??
+        saveProperty(process, "b-number", referenceNumber);
         saveProperty(process, "CollectionName1", "Editorial Photography"); //TODO
         saveProperty(process, "CollectionName2", referenceNumber); //TODO
         saveProperty(process, "securityTag", "open");
@@ -161,8 +161,12 @@ public class WellcomeProcessCreation {
         Files.copy(csvFile, importDir.resolve(csvFile.getFileName()));
 
         Path imagesDir = Paths.get(process.getImagesOrigDirectory(false));
+        int count = 1;
         for (Path tifFile : tifFiles) {
-            Files.copy(tifFile, imagesDir.resolve(tifFile.getFileName()));
+            String fileName = tifFile.getFileName().toString();
+            String ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
+            String newFileName = referenceNumber.replaceAll(" |\t", "_") + String.format("_%03d", count) + ext;
+            Files.copy(tifFile, imagesDir.resolve(newFileName));
         }
 
         WellcomeCreationProcess wcp = new WellcomeCreationProcess();
