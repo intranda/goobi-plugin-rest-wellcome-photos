@@ -167,6 +167,7 @@ public class WellcomeProcessCreation {
             String ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
             String newFileName = referenceNumber.replaceAll(" |\t", "_") + String.format("_%03d", count) + ext;
             Files.copy(tifFile, imagesDir.resolve(newFileName));
+            count++;
         }
 
         WellcomeCreationProcess wcp = new WellcomeCreationProcess();
@@ -196,7 +197,7 @@ public class WellcomeProcessCreation {
             md.setValue(csv.getValue("Shoot Type"));
             dsRoot.addMetadata(md);
             md = new Metadata(prefs.getMetadataTypeByName("CatalogIDDigital"));
-            md.setValue(csv.getValue("Reference"));
+            md.setValue(csv.getValue("Reference").replaceAll(" |\t", "_"));
             dsRoot.addMetadata(md);
             md = new Metadata(prefs.getMetadataTypeByName("PlaceOfPublication"));
             md.setValue(csv.getValue("Location"));
