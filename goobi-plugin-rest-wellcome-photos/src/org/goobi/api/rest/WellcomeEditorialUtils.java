@@ -26,9 +26,9 @@ import ugh.dl.Prefs;
 import ugh.exceptions.DocStructHasNoTypeException;
 import ugh.exceptions.MetadataTypeNotAllowedException;
 
-public class WellcomeUtils {
+public class WellcomeEditorialUtils {
 
-	private static final Logger logger = Logger.getLogger(WellcomeUtils.class);
+	private static final Logger logger = Logger.getLogger(WellcomeEditorialUtils.class);
 	private static final Namespace NS_MODS = Namespace.getNamespace("mods", "http://www.loc.gov/mods/v3");
 
 	public static List<String> getKeys(XMLConfiguration config) {

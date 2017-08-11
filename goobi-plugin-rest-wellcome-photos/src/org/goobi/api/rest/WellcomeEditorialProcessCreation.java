@@ -17,8 +17,8 @@ import javax.ws.rs.core.Response;
 
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.SystemUtils;
-import org.goobi.api.rest.response.WellcomeCreationProcess;
-import org.goobi.api.rest.response.WellcomeCreationResponse;
+import org.goobi.api.rest.response.WellcomeEditorialCreationProcess;
+import org.goobi.api.rest.response.WellcomeEditorialCreationResponse;
 import org.goobi.beans.Process;
 import org.goobi.beans.Processproperty;
 import org.goobi.beans.Step;
@@ -51,7 +51,7 @@ import ugh.fileformats.mets.MetsMods;
 
 @javax.ws.rs.Path("/wellcome")
 @Log4j
-public class WellcomeProcessCreation {
+public class WellcomeEditorialProcessCreation {
 
     private String currentIdentifier;
     private String currentWellcomeIdentifier;
@@ -76,7 +76,7 @@ public class WellcomeProcessCreation {
         }
 
         Prefs prefs = template.getRegelsatz().getPreferences();
-        List<WellcomeCreationProcess> processes = new ArrayList<>();
+        List<WellcomeEditorialCreationProcess> processes = new ArrayList<>();
 
         try (DirectoryStream<Path> ds = Files.newDirectoryStream(hotFolderPath)) {
             for (Path dir : ds) {
@@ -95,7 +95,7 @@ public class WellcomeProcessCreation {
                 }
                 Collections.sort(tifFiles);
                 try {
-                    WellcomeCreationProcess wcp = createProcess(csvFile, tifFiles, prefs, template);
+                    WellcomeEditorialCreationProcess wcp = createProcess(csvFile, tifFiles, prefs, template);
                     if (wcp == null) {
                         return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Cannot import csv file: "
                                 + csvFile))
@@ -114,13 +114,13 @@ public class WellcomeProcessCreation {
             log.error(e);
         }
 
-        WellcomeCreationResponse resp = new WellcomeCreationResponse();
+        WellcomeEditorialCreationResponse resp = new WellcomeEditorialCreationResponse();
         resp.setProcesses(processes);
         resp.setResult("success");
         return Response.status(Response.Status.OK).entity(resp).build();
     }
 
-    private WellcomeCreationProcess createProcess(Path csvFile, List<Path> tifFiles, Prefs prefs, Process template) throws Exception {
+    private WellcomeEditorialCreationProcess createProcess(Path csvFile, List<Path> tifFiles, Prefs prefs, Process template) throws Exception {
         CSVUtil csv = new CSVUtil(csvFile);
         String referenceNumber = csv.getValue("Reference", 0);
         Fileformat ff = convertData(csv, tifFiles, prefs);
@@ -170,7 +170,7 @@ public class WellcomeProcessCreation {
             count++;
         }
 
-        WellcomeCreationProcess wcp = new WellcomeCreationProcess();
+        WellcomeEditorialCreationProcess wcp = new WellcomeEditorialCreationProcess();
         wcp.setProcessId(process.getId());
         wcp.setProcessName(process.getTitel());
 
@@ -289,8 +289,8 @@ public class WellcomeProcessCreation {
         return ff;
     }
 
-    private WellcomeCreationResponse createErrorResponse(String errorText) {
-        WellcomeCreationResponse resp = new WellcomeCreationResponse();
+    private WellcomeEditorialCreationResponse createErrorResponse(String errorText) {
+        WellcomeEditorialCreationResponse resp = new WellcomeEditorialCreationResponse();
         resp.setResult("error");
         resp.setErrorText(errorText);
         return resp;
