@@ -1,6 +1,7 @@
 package org.goobi.api.rest;
 
 import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -15,6 +16,7 @@ import javax.ws.rs.POST;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.Response;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.SystemUtils;
 import org.goobi.api.rest.response.WellcomeEditorialCreationProcess;
@@ -80,6 +82,12 @@ public class WellcomeEditorialProcessCreation {
 
         try (DirectoryStream<Path> ds = Files.newDirectoryStream(hotFolderPath)) {
             for (Path dir : ds) {
+                Path lockFile = dir.resolve(".intranda_lock");
+                if (Files.exists(lockFile)) {
+                    continue;
+                }
+                try (OutputStream os = Files.newOutputStream(lockFile)) {
+                }
                 List<Path> tifFiles = new ArrayList<>();
                 Path csvFile = null;
                 try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(dir)) {
@@ -98,10 +106,11 @@ public class WellcomeEditorialProcessCreation {
                     WellcomeEditorialCreationProcess wcp = createProcess(csvFile, tifFiles, prefs, template);
                     if (wcp == null) {
                         return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Cannot import csv file: "
-                                + csvFile))
-                                .build();
+                                + csvFile)).build();
                     }
                     processes.add(wcp);
+                    // process created. Now delete this folder.
+                    FileUtils.deleteQuietly(dir.toFile());
                 } catch (Exception e) {
                     //TODO: this should be collected and be returned as one at the end
                     log.error(e);
