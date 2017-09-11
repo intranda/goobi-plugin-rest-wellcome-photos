@@ -96,7 +96,8 @@ public class WellcomeEditorialProcessCreation {
                         if (fileName.toLowerCase().endsWith(".csv")) {
                             csvFile = file;
                         }
-                        if (fileName.toLowerCase().endsWith(".tif") || fileName.toLowerCase().endsWith(".tiff")) {
+                        String fileNameLower = fileName.toLowerCase();
+                        if (fileNameLower.endsWith(".tif") || fileNameLower.endsWith(".tiff") || fileNameLower.endsWith(".mp4")) {
                             tifFiles.add(file);
                         }
                     }
