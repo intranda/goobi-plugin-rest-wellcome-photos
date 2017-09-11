@@ -214,7 +214,7 @@ public class WellcomeEditorialProcessCreation {
             String ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
             String newFileName = fileName;
             //only rename the EP shoot names
-            if (csvFile.getFileName().toString().startsWith("EP")) {
+            if (referenceNumber.startsWith("EP")) {
                 newFileName = referenceNumber.replaceAll(" |\t", "_") + String.format("_%03d", count) + ext;
             }
             Files.copy(tifFile, imagesDir.resolve(newFileName));
