@@ -84,6 +84,7 @@ public class WellcomeEditorialProcessCreation {
 
         try (DirectoryStream<Path> ds = Files.newDirectoryStream(hotFolderPath)) {
             for (Path dir : ds) {
+                log.debug("working with folder " + dir.getFileName());
                 if (!checkIfCopyingDone(dir)) {
                     continue;
                 }
@@ -156,11 +157,14 @@ public class WellcomeEditorialProcessCreation {
         if (allFiles1.size() != allFiles2.size()) {
             return false;
         }
-        boolean sameSize = true;
         for (Path p : allFiles1.keySet()) {
-            sameSize &= allFiles1.get(p) == allFiles2.get(p);
+            long size1 = allFiles1.get(p);
+            long size2 = allFiles2.get(p);
+            if (!(size1 == size2)) {
+                return false;
+            }
         }
-        return sameSize;
+        return true;
     }
 
     private WellcomeEditorialCreationProcess createProcess(Path csvFile, List<Path> tifFiles, Prefs prefs, Process template) throws Exception {
