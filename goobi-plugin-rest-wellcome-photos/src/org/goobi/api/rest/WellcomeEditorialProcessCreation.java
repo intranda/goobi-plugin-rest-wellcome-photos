@@ -9,7 +9,9 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import javax.ws.rs.HeaderParam;
 import javax.ws.rs.POST;
@@ -82,6 +84,9 @@ public class WellcomeEditorialProcessCreation {
 
         try (DirectoryStream<Path> ds = Files.newDirectoryStream(hotFolderPath)) {
             for (Path dir : ds) {
+                if (!checkIfCopyingDone(dir)) {
+                    continue;
+                }
                 Path lockFile = dir.resolve(".intranda_lock");
                 if (Files.exists(lockFile)) {
                     continue;
@@ -128,6 +133,34 @@ public class WellcomeEditorialProcessCreation {
         resp.setProcesses(processes);
         resp.setResult("success");
         return Response.status(Response.Status.OK).entity(resp).build();
+    }
+
+    private boolean checkIfCopyingDone(Path dir) throws IOException {
+        Map<Path, Long> allFiles1 = new HashMap<>();
+        try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(dir)) {
+            for (Path file : folderFiles) {
+                allFiles1.put(file, Files.size(file));
+            }
+        }
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException e) {
+            log.error(e);
+        }
+        Map<Path, Long> allFiles2 = new HashMap<>();
+        try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(dir)) {
+            for (Path file : folderFiles) {
+                allFiles2.put(file, Files.size(file));
+            }
+        }
+        if (allFiles1.size() != allFiles2.size()) {
+            return false;
+        }
+        boolean sameSize = true;
+        for (Path p : allFiles1.keySet()) {
+            sameSize &= allFiles1.get(p) == allFiles2.get(p);
+        }
+        return sameSize;
     }
 
     private WellcomeEditorialCreationProcess createProcess(Path csvFile, List<Path> tifFiles, Prefs prefs, Process template) throws Exception {
