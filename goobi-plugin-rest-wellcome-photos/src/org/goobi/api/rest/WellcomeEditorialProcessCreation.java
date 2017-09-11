@@ -170,7 +170,20 @@ public class WellcomeEditorialProcessCreation {
     private WellcomeEditorialCreationProcess createProcess(Path csvFile, List<Path> tifFiles, Prefs prefs, Process template) throws Exception {
         CSVUtil csv = new CSVUtil(csvFile);
         String referenceNumber = csv.getValue("Reference", 0);
-        Fileformat ff = convertData(csv, tifFiles, prefs);
+        List<Path> newTifFiles = new ArrayList<>();
+        int count = 1;
+        for (Path tifFile : tifFiles) {
+            String fileName = tifFile.getFileName().toString();
+            String ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
+            String newFileName = fileName;
+            //only rename the EP shoot names
+            if (referenceNumber.startsWith("EP")) {
+                newFileName = referenceNumber.replaceAll(" |\t", "_") + String.format("_%03d", count) + ext;
+            }
+            newTifFiles.add(tifFile.getParent().resolve(newFileName));
+            count++;
+        }
+        Fileformat ff = convertData(csv, newTifFiles, prefs);
         if (ff == null) {
             return null;
         }
@@ -208,15 +221,9 @@ public class WellcomeEditorialProcessCreation {
         Files.copy(csvFile, importDir.resolve(csvFile.getFileName()));
 
         Path imagesDir = Paths.get(process.getImagesOrigDirectory(false));
-        int count = 1;
+        count = 0;
         for (Path tifFile : tifFiles) {
-            String fileName = tifFile.getFileName().toString();
-            String ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
-            String newFileName = fileName;
-            //only rename the EP shoot names
-            if (referenceNumber.startsWith("EP")) {
-                newFileName = referenceNumber.replaceAll(" |\t", "_") + String.format("_%03d", count) + ext;
-            }
+            String newFileName = newTifFiles.get(count).getFileName().toString();
             Files.copy(tifFile, imagesDir.resolve(newFileName));
             count++;
         }
