@@ -174,7 +174,11 @@ public class WellcomeEditorialProcessCreation {
         for (Path tifFile : tifFiles) {
             String fileName = tifFile.getFileName().toString();
             String ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase();
-            String newFileName = referenceNumber.replaceAll(" |\t", "_") + String.format("_%03d", count) + ext;
+            String newFileName = fileName;
+            //only rename the EP shoot names
+            if (csvFile.getFileName().toString().startsWith("EP")) {
+                newFileName = referenceNumber.replaceAll(" |\t", "_") + String.format("_%03d", count) + ext;
+            }
             Files.copy(tifFile, imagesDir.resolve(newFileName));
             count++;
         }
@@ -183,6 +187,14 @@ public class WellcomeEditorialProcessCreation {
         wcp.setProcessId(process.getId());
         wcp.setProcessName(process.getTitel());
 
+        //start work for process
+        List<Step> steps = StepManager.getStepsForProcess(process.getId());
+        for (Step s : steps) {
+            if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
+                ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
+                myThread.start();
+            }
+        }
         return wcp;
     }
 
@@ -379,13 +391,6 @@ public class WellcomeEditorialProcessCreation {
 
         process.readMetadataFile();
 
-        List<Step> steps = StepManager.getStepsForProcess(process.getId());
-        for (Step s : steps) {
-            if (s.getBearbeitungsstatusEnum().equals(StepStatus.OPEN) && s.isTypAutomatisch()) {
-                ScriptThreadWithoutHibernate myThread = new ScriptThreadWithoutHibernate(s);
-                myThread.start();
-            }
-        }
     }
 
     private void saveProperty(Process process, String name, String value) {
