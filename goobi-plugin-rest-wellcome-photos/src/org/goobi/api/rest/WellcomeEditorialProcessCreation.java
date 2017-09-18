@@ -6,12 +6,11 @@ import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import javax.ws.rs.HeaderParam;
 import javax.ws.rs.POST;
@@ -59,6 +58,7 @@ public class WellcomeEditorialProcessCreation {
 
     private String currentIdentifier;
     private String currentWellcomeIdentifier;
+    private static final long FIVEMINUTES = 1000 * 60 * 5;
 
     @javax.ws.rs.Path("/createeditorials")
     @POST
@@ -137,34 +137,19 @@ public class WellcomeEditorialProcessCreation {
     }
 
     private boolean checkIfCopyingDone(Path dir) throws IOException {
-        Map<Path, Long> allFiles1 = new HashMap<>();
+        long now = new Date().getTime();
+        long dirAccessTime = Files.readAttributes(dir, BasicFileAttributes.class).lastModifiedTime().toMillis();
+        long smallestDifference = now - dirAccessTime;
         try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(dir)) {
             for (Path file : folderFiles) {
-                allFiles1.put(file, Files.size(file));
+                long fileAccessTime = Files.readAttributes(file, BasicFileAttributes.class).lastModifiedTime().toMillis();
+                long diff = now - fileAccessTime;
+                if (diff < smallestDifference) {
+                    smallestDifference = diff;
+                }
             }
         }
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            log.error(e);
-        }
-        Map<Path, Long> allFiles2 = new HashMap<>();
-        try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(dir)) {
-            for (Path file : folderFiles) {
-                allFiles2.put(file, Files.size(file));
-            }
-        }
-        if (allFiles1.size() != allFiles2.size()) {
-            return false;
-        }
-        for (Path p : allFiles1.keySet()) {
-            long size1 = allFiles1.get(p);
-            long size2 = allFiles2.get(p);
-            if (!(size1 == size2)) {
-                return false;
-            }
-        }
-        return true;
+        return FIVEMINUTES < smallestDifference;
     }
 
     private WellcomeEditorialCreationProcess createProcess(Path csvFile, List<Path> tifFiles, Prefs prefs, Process template) throws Exception {
