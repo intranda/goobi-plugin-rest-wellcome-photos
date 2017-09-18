@@ -7,6 +7,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
@@ -137,19 +138,26 @@ public class WellcomeEditorialProcessCreation {
     }
 
     private boolean checkIfCopyingDone(Path dir) throws IOException {
-        long now = new Date().getTime();
-        long dirAccessTime = Files.readAttributes(dir, BasicFileAttributes.class).lastModifiedTime().toMillis();
-        long smallestDifference = now - dirAccessTime;
+        if (!Files.isDirectory(dir)) {
+            return false;
+        }
+        Date now = new Date();
+        FileTime dirAccessTime = Files.readAttributes(dir, BasicFileAttributes.class).lastModifiedTime();
+        log.debug("now: " + now + " dirAccessTime: " + dirAccessTime);
+        long smallestDifference = now.getTime() - dirAccessTime.toMillis();
+        int fileCount = 0;
         try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(dir)) {
             for (Path file : folderFiles) {
-                long fileAccessTime = Files.readAttributes(file, BasicFileAttributes.class).lastModifiedTime().toMillis();
-                long diff = now - fileAccessTime;
+                fileCount++;
+                FileTime fileAccessTime = Files.readAttributes(file, BasicFileAttributes.class).lastModifiedTime();
+                log.debug("now: " + now + " fileAccessTime: " + fileAccessTime);
+                long diff = now.getTime() - fileAccessTime.toMillis();
                 if (diff < smallestDifference) {
                     smallestDifference = diff;
                 }
             }
         }
-        return FIVEMINUTES < smallestDifference;
+        return (FIVEMINUTES < smallestDifference) && fileCount > 0;
     }
 
     private WellcomeEditorialCreationProcess createProcess(Path csvFile, List<Path> tifFiles, Prefs prefs, Process template) throws Exception {
