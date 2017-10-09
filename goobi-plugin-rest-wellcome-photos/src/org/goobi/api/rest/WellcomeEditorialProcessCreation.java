@@ -100,11 +100,12 @@ public class WellcomeEditorialProcessCreation {
                 try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(dir)) {
                     for (Path file : folderFiles) {
                         String fileName = file.getFileName().toString();
-                        if (fileName.toLowerCase().endsWith(".csv")) {
+                        String fileNameLower = fileName.toLowerCase();
+                        if (fileNameLower.endsWith(".csv") && !fileNameLower.startsWith(".")) {
                             csvFile = file;
                         }
-                        String fileNameLower = fileName.toLowerCase();
-                        if (fileNameLower.endsWith(".tif") || fileNameLower.endsWith(".tiff") || fileNameLower.endsWith(".mp4")) {
+                        if ((fileNameLower.endsWith(".tif") || fileNameLower.endsWith(".tiff") || fileNameLower.endsWith(".mp4"))
+                                && !fileNameLower.startsWith(".")) {
                             tifFiles.add(file);
                         }
                     }
@@ -211,12 +212,20 @@ public class WellcomeEditorialProcessCreation {
         Path processDir = Paths.get(process.getProcessDataDirectory());
         Path importDir = processDir.resolve("import");
         Files.createDirectories(importDir);
+        log.trace(String.format("Copying %s to %s (size: %d)",
+                csvFile.toAbsolutePath().toString(),
+                importDir.resolve(csvFile.getFileName()).toString(),
+                Files.size(csvFile)));
         Files.copy(csvFile, importDir.resolve(csvFile.getFileName()));
 
         Path imagesDir = Paths.get(process.getImagesOrigDirectory(false));
         count = 0;
         for (Path tifFile : tifFiles) {
             String newFileName = newTifFiles.get(count).getFileName().toString();
+            log.trace(String.format("Copying %s to %s (size: %d)",
+                    tifFile.toAbsolutePath().toString(),
+                    imagesDir.resolve(newFileName).toString(),
+                    Files.size(tifFile)));
             Files.copy(tifFile, imagesDir.resolve(newFileName));
             count++;
         }
