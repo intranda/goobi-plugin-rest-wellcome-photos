@@ -187,8 +187,8 @@ public class WellcomeEditorialProcessCreation {
         NeuenProzessAnlegen(process, template, ff, prefs);
 
         saveProperty(process, "b-number", referenceNumber);
-        saveProperty(process, "CollectionName1", "Editorial Photography"); //TODO
-        saveProperty(process, "CollectionName2", referenceNumber); //TODO
+        saveProperty(process, "CollectionName1", "Editorial Photography");
+        saveProperty(process, "CollectionName2", referenceNumber);
         saveProperty(process, "securityTag", "open");
         saveProperty(process, "schemaName", "Millennium");
         saveProperty(process, "archiveStatus", referenceNumber.startsWith("CP") ? "archived" : "contemporary");
@@ -282,7 +282,7 @@ public class WellcomeEditorialProcessCreation {
                 Person p = new Person(prefs.getMetadataTypeByName("Photographer"));
                 int lastSpace = name.lastIndexOf(' ');
                 String firstName = name.substring(0, lastSpace);
-                String lastName = name.substring(lastSpace, name.length() - 1);
+                String lastName = name.substring(lastSpace + 1, name.length());
                 p.setFirstname(firstName);
                 p.setLastname(lastName);
                 dsRoot.addPerson(p);
@@ -293,7 +293,7 @@ public class WellcomeEditorialProcessCreation {
                 Person p = new Person(prefs.getMetadataTypeByName("Creator"));
                 int lastSpace = name.lastIndexOf(' ');
                 String firstName = name.substring(0, lastSpace);
-                String lastName = name.substring(lastSpace, name.length() - 1);
+                String lastName = name.substring(lastSpace + 1, name.length());
                 p.setFirstname(firstName);
                 p.setLastname(lastName);
                 dsRoot.addPerson(p);
