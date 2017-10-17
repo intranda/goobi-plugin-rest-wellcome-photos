@@ -14,5 +14,6 @@
 	<classpathentry kind="con" path="org.eclipse.jdt.junit.JUNIT_CONTAINER/4"/>
 	<classpathentry kind="lib" path="/Goobi/webapp/WEB-INF/lib/commons-csv-1.4.jar"/>
 	<classpathentry kind="lib" path="/Goobi/webapp/WEB-INF/lib/commons-io-2.5.jar"/>
+	<classpathentry kind="lib" path="/Goobi/webapp/WEB-INF/lib/aws-java-sdk-1.11.160.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

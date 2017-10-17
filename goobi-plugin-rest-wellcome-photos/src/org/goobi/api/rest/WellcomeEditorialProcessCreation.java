@@ -29,6 +29,9 @@ import org.goobi.beans.Step;
 import org.goobi.managedbeans.LoginBean;
 import org.goobi.production.flow.jobs.HistoryAnalyserJob;
 
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+
 import de.sub.goobi.helper.BeanHelper;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.ScriptThreadWithoutHibernate;
@@ -64,7 +67,8 @@ public class WellcomeEditorialProcessCreation {
     @javax.ws.rs.Path("/createeditorials")
     @POST
     @Produces("text/xml")
-    public Response createNewProcess(@HeaderParam("templateid") int templateId, @HeaderParam("hotfolder") String hotFolder) {
+    public Response createNewProcess(@HeaderParam("templateid") int templateNewId, @HeaderParam("updatetemplateid") int templateUpdateId,
+            @HeaderParam("hotfolder") String hotFolder) {
 
         Path hotFolderPath = Paths.get(hotFolder);
         if (!Files.exists(hotFolderPath) || !Files.isDirectory(hotFolderPath)) {
@@ -73,14 +77,15 @@ public class WellcomeEditorialProcessCreation {
             return resp;
         }
 
-        Process template = ProcessManager.getProcessById(templateId);
-        if (template == null) {
+        Process templateUpdate = ProcessManager.getProcessById(templateUpdateId);
+        Process templateNew = ProcessManager.getProcessById(templateNewId);
+        if (templateNew == null) {
             Response resp = Response.status(Response.Status.BAD_REQUEST).entity(createErrorResponse("Cannot find process template with id "
-                    + templateId)).build();
+                    + templateNewId)).build();
             return resp;
         }
 
-        Prefs prefs = template.getRegelsatz().getPreferences();
+        Prefs prefs = templateNew.getRegelsatz().getPreferences();
         List<WellcomeEditorialCreationProcess> processes = new ArrayList<>();
 
         try (DirectoryStream<Path> ds = Files.newDirectoryStream(hotFolderPath)) {
@@ -112,7 +117,7 @@ public class WellcomeEditorialProcessCreation {
                 }
                 Collections.sort(tifFiles);
                 try {
-                    WellcomeEditorialCreationProcess wcp = createProcess(csvFile, tifFiles, prefs, template);
+                    WellcomeEditorialCreationProcess wcp = createProcess(csvFile, tifFiles, prefs, templateNew, templateUpdate);
                     if (wcp == null) {
                         return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Cannot import csv file: "
                                 + csvFile)).build();
@@ -161,7 +166,8 @@ public class WellcomeEditorialProcessCreation {
         return (FIVEMINUTES < smallestDifference) && fileCount > 0;
     }
 
-    private WellcomeEditorialCreationProcess createProcess(Path csvFile, List<Path> tifFiles, Prefs prefs, Process template) throws Exception {
+    private WellcomeEditorialCreationProcess createProcess(Path csvFile, List<Path> tifFiles, Prefs prefs, Process templateNew,
+            Process templateUpdate) throws Exception {
         CSVUtil csv = new CSVUtil(csvFile);
         String referenceNumber = csv.getValue("Reference", 0);
         List<Path> newTifFiles = new ArrayList<>();
@@ -181,11 +187,26 @@ public class WellcomeEditorialProcessCreation {
         if (ff == null) {
             return null;
         }
-        Process process = cloneTemplate(template);
+
+        Process process = null;
+
+        boolean existsInGoobi = ProcessManager.countProcessTitle(referenceNumber.replaceAll(" |\t", "_")) > 0;
+        boolean existsOnS3 = checkIfExistsOnS3(referenceNumber);
+
+        if (existsOnS3) {
+            process = cloneTemplate(templateUpdate);
+        } else if (existsInGoobi) {
+            // does exist in Goobi, but not on S3 => wait (return error)
+            WellcomeEditorialCreationProcess wecp = new WellcomeEditorialCreationProcess();
+            return wecp;
+        } else {
+            process = cloneTemplate(templateNew);
+        }
+
         // set title
         process.setTitel(referenceNumber.replaceAll(" |\t", "_"));
 
-        NeuenProzessAnlegen(process, template, ff, prefs);
+        NeuenProzessAnlegen(process, templateNew, ff, prefs);
 
         saveProperty(process, "b-number", referenceNumber);
         saveProperty(process, "CollectionName1", "Editorial Photography");
@@ -243,6 +264,16 @@ public class WellcomeEditorialProcessCreation {
             }
         }
         return wcp;
+    }
+
+    private boolean checkIfExistsOnS3(final String _reference) {
+        String reference = _reference.replaceAll(" |\t", "_");
+        int refLen = reference.length();
+        String bucket = "wellcomecollection-editorial-photography";
+        String keyPrefix = reference.substring(refLen - 2, refLen) + "/" + reference + "/";
+        String key = keyPrefix + reference + ".xml";
+        AmazonS3 s3client = AmazonS3ClientBuilder.defaultClient();
+        return s3client.doesObjectExist(bucket, key);
     }
 
     private Fileformat convertData(CSVUtil csv, List<Path> tifFiles, Prefs prefs) {
