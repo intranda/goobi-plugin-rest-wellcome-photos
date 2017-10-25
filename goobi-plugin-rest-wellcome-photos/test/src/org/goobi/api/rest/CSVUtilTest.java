@@ -27,4 +27,13 @@ public class CSVUtilTest {
         Assert.assertEquals("Objects", util.getValue("Shoot Type"));
         Assert.assertEquals("Photographic Studio, 183, 4th floor", util.getValue("Location"));
     }
+
+    @Test
+    public void testProbablyBroken2() throws FileNotFoundException, IOException {
+        CSVUtil util = new CSVUtil(Paths.get("resources/check.csv"));
+        System.out.println(util.getValue("Reference"));
+        //        Assert.assertEquals("EP 000016", util.getValue("Reference"));
+        //        Assert.assertEquals("Objects", util.getValue("Shoot Type"));
+        //        Assert.assertEquals("Photographic Studio, 183, 4th floor", util.getValue("Location"));
+    }
 }
