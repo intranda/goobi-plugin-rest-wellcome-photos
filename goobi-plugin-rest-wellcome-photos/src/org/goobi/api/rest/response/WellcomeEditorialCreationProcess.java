@@ -2,8 +2,10 @@ package org.goobi.api.rest.response;
 
 import lombok.Data;
 
-public @Data class WellcomeEditorialCreationProcess {
+@Data
+public class WellcomeEditorialCreationProcess {
     private String processName;
 
+    private String sourceFolder;
     private int processId;
 }

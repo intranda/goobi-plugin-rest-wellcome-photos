@@ -122,12 +122,12 @@ public class WellcomeEditorialProcessCreation {
                         return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Cannot import csv file: "
                                 + csvFile)).build();
                     }
+                    wcp.setSourceFolder(dir.getFileName().toString());
+                    processes.add(wcp);
                     if (wcp.getProcessId() == 0) {
+                        //no process created. Delete lockfile and 
                         Files.delete(lockFile);
-                        return Response.status(Response.Status.CONFLICT).entity(createErrorResponse(
-                                "Process with reference exists in Goobi, but not on S3")).build();
                     } else {
-                        processes.add(wcp);
                         // process created. Now delete this folder.
                         FileUtils.deleteQuietly(dir.toFile());
                     }
