@@ -200,8 +200,7 @@ public class WellcomeEditorialProcessCreation {
         List<Process> processes = ProcessManager.getProcesses("", "prozesse.titel=\"" + referenceNumber.replaceAll(" |\t", "_") + "\"");
         log.debug("found " + processes.size() + " processes with title " + referenceNumber.replaceAll(" |\t", "_"));
         for (Process p : processes) {
-            //dieser Prozess ist komplett durchgelaufen:
-            if (p.getSortHelperStatus().equals("100000000")) {
+            if (!p.getSortHelperStatus().equals("100000000")) {
                 existsInGoobiNotDone = true;
                 break;
             }
