@@ -196,16 +196,26 @@ public class WellcomeEditorialProcessCreation {
 
         Process process = null;
 
-        boolean existsInGoobi = ProcessManager.countProcessTitle(referenceNumber.replaceAll(" |\t", "_")) > 0;
+        boolean existsInGoobiNotDone = false;
+        List<Process> processes = ProcessManager.getProcesses("", "titel=" + referenceNumber.replaceAll(" |\t", "_"));
+        for (Process p : processes) {
+            //dieser Prozess ist komplett durchgelaufen:
+            if (p.getSortHelperStatus().equals("100000000")) {
+                existsInGoobiNotDone = true;
+                break;
+            }
+        }
         boolean existsOnS3 = checkIfExistsOnS3(referenceNumber);
 
-        if (existsOnS3) {
-            process = cloneTemplate(templateUpdate);
-        } else if (existsInGoobi) {
-            // does exist in Goobi, but not on S3 => wait (return error)
+        if (existsInGoobiNotDone) {
+            // does exist in Goobi, but is not done => wait (return error)
             WellcomeEditorialCreationProcess wecp = new WellcomeEditorialCreationProcess();
             return wecp;
+        } else if (existsOnS3) {
+            // is already on s3, but everything in Goobi went through => update
+            process = cloneTemplate(templateUpdate);
         } else {
+            // not in Goobi and not on s3 => new shoot
             process = cloneTemplate(templateNew);
         }
 
