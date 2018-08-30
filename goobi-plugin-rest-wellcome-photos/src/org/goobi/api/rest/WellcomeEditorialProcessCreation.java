@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 
 import javax.ws.rs.HeaderParam;
 import javax.ws.rs.POST;
@@ -68,8 +69,16 @@ public class WellcomeEditorialProcessCreation {
     @POST
     @Produces("text/xml")
     public Response createNewProcess(@HeaderParam("templateid") int templateNewId, @HeaderParam("updatetemplateid") int templateUpdateId,
-            @HeaderParam("hotfolder") String hotFolder) {
+            @HeaderParam("hotfolder") String hotFolder, String s3Uri) {
 
+        String workingStorage = System.getenv("WORKING_STORAGE");
+        Path workDir = Paths.get(workingStorage, UUID.randomUUID().toString());
+        try {
+            Files.createDirectories(workDir);
+        } catch (IOException e1) {
+            // TODO Auto-generated catch block
+            log.error(e1);
+        }
         Path hotFolderPath = Paths.get(hotFolder);
         if (!Files.exists(hotFolderPath) || !Files.isDirectory(hotFolderPath)) {
             Response resp = Response.status(Response.Status.BAD_REQUEST).entity(createErrorResponse("Hotfolder does not exist or is no directory "
