@@ -15,6 +15,8 @@ import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 import javax.ws.rs.HeaderParam;
 import javax.ws.rs.POST;
@@ -25,6 +27,7 @@ import org.apache.commons.configuration.XMLConfiguration;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.SystemUtils;
+import org.apache.log4j.Level;
 import org.goobi.api.rest.response.WellcomeEditorialCreationProcess;
 import org.goobi.api.rest.response.WellcomeEditorialCreationResponse;
 import org.goobi.beans.Process;
@@ -78,6 +81,8 @@ public class WellcomeEditorialProcessCreation {
 	private static final long FIVEMINUTES = 1000 * 60 * 5;
 	private static AmazonS3 s3 = null;
 	private Pattern p = Pattern.compile("/(:?efs|opt)/digiverso/goobi/metadata/?");
+	private String bucketIn;
+	private String bucketOut;
 
 	@javax.ws.rs.Path("/createeditorials")
 	@POST
@@ -95,17 +100,20 @@ public class WellcomeEditorialProcessCreation {
 			log.error(e1);
 		}
 		try {
-			downloadPrefixToDir(s3Uri, workDir);
+			downloadPrefixToDir(s3Uri, workDir);// TODO download zip and unzip in dir
+			Path zipFile = null;// return from download?
+			unzip(zipFile, workDir);
 		} catch (IOException e1) {
 			// TODO Auto-generated catch block
 			log.error(e1);
 		}
-		Path hotFolderPath = Paths.get(hotFolder);
-		if (!Files.exists(hotFolderPath) || !Files.isDirectory(hotFolderPath)) {
-			Response resp = Response.status(Response.Status.BAD_REQUEST)
-					.entity(createErrorResponse("Hotfolder does not exist or is no directory " + hotFolder)).build();
-			return resp;
-		}
+		/*
+		 * Path hotFolderPath = Paths.get(hotFolder); if (!Files.exists(hotFolderPath)
+		 * || !Files.isDirectory(hotFolderPath)) { Response resp =
+		 * Response.status(Response.Status.BAD_REQUEST)
+		 * .entity(createErrorResponse("Hotfolder does not exist or is no directory " +
+		 * hotFolder)).build(); return resp; }
+		 */
 
 		Process templateUpdate = ProcessManager.getProcessById(templateUpdateId);
 		Process templateNew = ProcessManager.getProcessById(templateNewId);
@@ -118,12 +126,12 @@ public class WellcomeEditorialProcessCreation {
 		Prefs prefs = templateNew.getRegelsatz().getPreferences();
 		List<WellcomeEditorialCreationProcess> processes = new ArrayList<>();
 
-		try (DirectoryStream<Path> ds = Files.newDirectoryStream(hotFolderPath)) {
+		try (DirectoryStream<Path> ds = Files.newDirectoryStream(workDir)) {
 			for (Path dir : ds) {
 				log.debug("working with folder " + dir.getFileName());
-				if (!checkIfCopyingDone(dir)) {
-					continue;
-				}
+				/*
+				 * if (!checkIfCopyingDone(dir)) { continue; }
+				 */
 				Path lockFile = dir.resolve(".intranda_lock");
 				if (Files.exists(lockFile)) {
 					continue;
@@ -185,6 +193,13 @@ public class WellcomeEditorialProcessCreation {
 		return Response.status(Response.Status.OK).entity(resp).build();
 	}
 
+	private void uploadFile(String bucketName, String fileKey, Path file) {
+		try {
+			s3.putObject(bucketName, fileKey, file.toString());
+		} finally {
+		}
+	}
+
 	private void removeDir(Path rootFolder) throws IOException {
 		if (Files.isDirectory(rootFolder)) {
 			DirectoryStream<Path> directoryStream = Files.newDirectoryStream(rootFolder);
@@ -194,6 +209,22 @@ public class WellcomeEditorialProcessCreation {
 			Files.delete(rootFolder);
 		} else {
 			Files.delete(rootFolder);
+		}
+	}
+
+	private void unzip(final Path zipFile, final Path output) {
+		try (ZipInputStream zipInputStream = new ZipInputStream(Files.newInputStream(zipFile))) {
+			ZipEntry entry;
+			while ((entry = zipInputStream.getNextEntry()) != null) {
+				final Path toPath = output.resolve(entry.getName());
+				if (entry.isDirectory()) {
+					Files.createDirectory(toPath);
+				} else {
+					Files.copy(zipInputStream, toPath);
+				}
+			}
+		} catch (IOException e) {
+			log.error(e);
 		}
 	}
 
