@@ -2,19 +2,15 @@ package org.goobi.api.rest;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.attribute.BasicFileAttributes;
-import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
-import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -23,11 +19,9 @@ import javax.ws.rs.POST;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.Response;
 
-import org.apache.commons.configuration.XMLConfiguration;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.SystemUtils;
-import org.apache.log4j.Level;
 import org.goobi.api.rest.response.WellcomeEditorialCreationProcess;
 import org.goobi.api.rest.response.WellcomeEditorialCreationResponse;
 import org.goobi.beans.Process;
@@ -36,21 +30,15 @@ import org.goobi.beans.Step;
 import org.goobi.managedbeans.LoginBean;
 import org.goobi.production.flow.jobs.HistoryAnalyserJob;
 
-import com.amazonaws.ClientConfiguration;
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.client.builder.AwsClientBuilder;
-import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.model.ObjectListing;
+import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.S3Object;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
 
 import de.sub.goobi.helper.BeanHelper;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.ScriptThreadWithoutHibernate;
+import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.helper.enums.PropertyType;
 import de.sub.goobi.helper.enums.StepEditType;
 import de.sub.goobi.helper.enums.StepStatus;
@@ -78,11 +66,8 @@ public class WellcomeEditorialProcessCreation {
 
 	private String currentIdentifier;
 	private String currentWellcomeIdentifier;
-	private static final long FIVEMINUTES = 1000 * 60 * 5;
-	private static AmazonS3 s3 = null;
-	private Pattern p = Pattern.compile("/(:?efs|opt)/digiverso/goobi/metadata/?");
-	private String bucketIn;
-	private String bucketOut;
+//	private static final long FIVEMINUTES = 1000 * 60 * 5;
+//	private static AmazonS3 s3 = null;
 
 	@javax.ws.rs.Path("/createeditorials")
 	@POST
@@ -96,24 +81,24 @@ public class WellcomeEditorialProcessCreation {
 		try {
 			Files.createDirectories(workDir);
 		} catch (IOException e1) {
-			// TODO Auto-generated catch block
+			log.error("Unable to create temporary directory", e1);
 			log.error(e1);
 		}
+		// download and unpack zip
 		try {
-			downloadPrefixToDir(s3Uri, workDir);// TODO download zip and unzip in dir
-			Path zipFile = null;// return from download?
+			Path zipFile = downloadZip(s3Uri, workDir);//
 			unzip(zipFile, workDir);
+			Files.delete(zipFile);
 		} catch (IOException e1) {
-			// TODO Auto-generated catch block
-			log.error(e1);
+			log.error("Unable to move zip-file contents to working directory", e1);
 		}
-		/*
-		 * Path hotFolderPath = Paths.get(hotFolder); if (!Files.exists(hotFolderPath)
-		 * || !Files.isDirectory(hotFolderPath)) { Response resp =
-		 * Response.status(Response.Status.BAD_REQUEST)
-		 * .entity(createErrorResponse("Hotfolder does not exist or is no directory " +
-		 * hotFolder)).build(); return resp; }
-		 */
+
+//		Path hotFolderPath = Paths.get(hotFolder);
+//		if (!Files.exists(hotFolderPath) || !Files.isDirectory(hotFolderPath)) {
+//			Response resp = Response.status(Response.Status.BAD_REQUEST)
+//					.entity(createErrorResponse("Hotfolder does not exist or is no directory " + hotFolder)).build();
+//			return resp;
+//		}
 
 		Process templateUpdate = ProcessManager.getProcessById(templateUpdateId);
 		Process templateNew = ProcessManager.getProcessById(templateNewId);
@@ -129,15 +114,17 @@ public class WellcomeEditorialProcessCreation {
 		try (DirectoryStream<Path> ds = Files.newDirectoryStream(workDir)) {
 			for (Path dir : ds) {
 				log.debug("working with folder " + dir.getFileName());
-				/*
-				 * if (!checkIfCopyingDone(dir)) { continue; }
-				 */
-				Path lockFile = dir.resolve(".intranda_lock");
-				if (Files.exists(lockFile)) {
-					continue;
-				}
-				try (OutputStream os = Files.newOutputStream(lockFile)) {
-				}
+
+//				if (!checkIfCopyingDone(dir)) {
+//					continue;
+//				}
+
+//				Path lockFile = dir.resolve(".intranda_lock");
+//				if (Files.exists(lockFile)) {
+//					continue;
+//				}
+//				try (OutputStream os = Files.newOutputStream(lockFile)) {
+//				}
 				List<Path> tifFiles = new ArrayList<>();
 				Path csvFile = null;
 				try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(dir)) {
@@ -163,10 +150,10 @@ public class WellcomeEditorialProcessCreation {
 					}
 					wcp.setSourceFolder(dir.getFileName().toString());
 					processes.add(wcp);
-					if (wcp.getProcessId() == 0) {
-						// no process created. Delete lockfile and
-						Files.delete(lockFile);
-					} else {
+					if (!(wcp.getProcessId() == 0)) {
+//						// no process created. Delete lockfile and
+//						Files.delete(lockFile);
+//					} else {
 						// process created. Now delete this folder.
 						FileUtils.deleteQuietly(dir.toFile());
 					}
@@ -178,38 +165,12 @@ public class WellcomeEditorialProcessCreation {
 				}
 			}
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			log.error(e);
-		}
-		try {
-			removeDir(workDir);
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			log.error(e);
+			log.error("Unable to access files in temporary Directory", e);
 		}
 		WellcomeEditorialCreationResponse resp = new WellcomeEditorialCreationResponse();
 		resp.setProcesses(processes);
 		resp.setResult("success");
 		return Response.status(Response.Status.OK).entity(resp).build();
-	}
-
-	private void uploadFile(String bucketName, String fileKey, Path file) {
-		try {
-			s3.putObject(bucketName, fileKey, file.toString());
-		} finally {
-		}
-	}
-
-	private void removeDir(Path rootFolder) throws IOException {
-		if (Files.isDirectory(rootFolder)) {
-			DirectoryStream<Path> directoryStream = Files.newDirectoryStream(rootFolder);
-			for (Path path : directoryStream) {
-				removeDir(path);
-			}
-			Files.delete(rootFolder);
-		} else {
-			Files.delete(rootFolder);
-		}
 	}
 
 	private void unzip(final Path zipFile, final Path output) {
@@ -228,100 +189,114 @@ public class WellcomeEditorialProcessCreation {
 		}
 	}
 
-	private boolean checkIfCopyingDone(Path dir) throws IOException {
-		if (!Files.isDirectory(dir)) {
-			return false;
-		}
-		Date now = new Date();
-		FileTime dirAccessTime = Files.readAttributes(dir, BasicFileAttributes.class).lastModifiedTime();
-		log.debug("now: " + now + " dirAccessTime: " + dirAccessTime);
-		long smallestDifference = now.getTime() - dirAccessTime.toMillis();
-		int fileCount = 0;
-		try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(dir)) {
-			for (Path file : folderFiles) {
-				fileCount++;
-				FileTime fileAccessTime = Files.readAttributes(file, BasicFileAttributes.class).lastModifiedTime();
-				log.debug("now: " + now + " fileAccessTime: " + fileAccessTime);
-				long diff = now.getTime() - fileAccessTime.toMillis();
-				if (diff < smallestDifference) {
-					smallestDifference = diff;
-				}
-			}
-		}
-		return (FIVEMINUTES < smallestDifference) && fileCount > 0;
-	}
-
-	/**
-	 * downloads files from passed prefix to passed folder
-	 * 
-	 * requires "s3_DATA_BUCKET" to be set correctly reads s3 settings from config
-	 * file
-	 * 
-	 * @param prefix where files are
-	 * @param dir    path to directory where files will be placed
-	 */
-	private void downloadPrefixToDir(String prefix, Path dir) throws IOException {
-		XMLConfiguration pc = null;
-		String bucket = null;
-		try {
-			bucket = System.getenv("S3_DATA_BUCKET");
-		} catch (IllegalArgumentException e) {
-			log.error("S3 Bucket enviroment variable not set");
-		}
-		try {
-			pc = new XMLConfiguration("s3Config.xml");
-		} catch (org.apache.commons.configuration.ConfigurationException e) {
-			log.error("s3 Config-file not found");
-		}
-
-		if (pc.getBoolean("useCustomS3", false)) {
-			AWSCredentials credentials = new BasicAWSCredentials(pc.getString("S3AccessKeyID"),
-					pc.getString("S3SecretAccessKey"));
-			ClientConfiguration clientConfiguration = new ClientConfiguration();
-			clientConfiguration.setSignerOverride("AWSS3V4SignerType");
-
-			s3 = AmazonS3ClientBuilder.standard()
-					.withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(pc.getString("S3_ENDPOINT"),
-							Regions.US_EAST_1.name()))
-					.withPathStyleAccessEnabled(true).withClientConfiguration(clientConfiguration)
-					.withCredentials(new AWSStaticCredentialsProvider(credentials)).build();
-		}
-		if (!Files.exists(dir)) {
-			Files.createDirectories(dir);
-		}
-		String cleanedPrefix = p.matcher(prefix).replaceAll("");
-		if (!cleanedPrefix.endsWith("/")) {
-			cleanedPrefix = cleanedPrefix + "/";
-		}
-		ObjectListing listing = s3.listObjects(bucket, cleanedPrefix);
-		for (S3ObjectSummary os : listing.getObjectSummaries()) {
-			downloadS3ObjectToFolder(cleanedPrefix, dir, os);
-		}
-		while (listing.isTruncated()) {
-			listing = s3.listNextBatchOfObjects(listing);
-			for (S3ObjectSummary os : listing.getObjectSummaries()) {
-				downloadS3ObjectToFolder(cleanedPrefix, dir, os);
-			}
-		}
-
-	}
-
-	/**
-	 * downloads file at passed s3 prefix to passed folder
-	 * 
-	 * uses object variable s3
-	 * 
-	 * @param sourcePrefix prefix of file
-	 * @param target       path to folder where downloaded file will be placed
-	 */
-	private void downloadS3ObjectToFolder(String sourcePrefix, Path target, S3ObjectSummary os) throws IOException {
-		String key = os.getKey();
-		Path targetPath = target.resolve(key.replace(sourcePrefix, ""));
-		S3Object obj = s3.getObject(os.getBucketName(), key);
+//	private boolean checkIfCopyingDone(Path dir) throws IOException {
+//		if (!Files.isDirectory(dir)) {
+//			return false;
+//		}
+//		Date now = new Date();
+//		FileTime dirAccessTime = Files.readAttributes(dir, BasicFileAttributes.class).lastModifiedTime();
+//		log.debug("now: " + now + " dirAccessTime: " + dirAccessTime);
+//		long smallestDifference = now.getTime() - dirAccessTime.toMillis();
+//		int fileCount = 0;
+//		try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(dir)) {
+//			for (Path file : folderFiles) {
+//				fileCount++;
+//				FileTime fileAccessTime = Files.readAttributes(file, BasicFileAttributes.class).lastModifiedTime();
+//				log.debug("now: " + now + " fileAccessTime: " + fileAccessTime);
+//				long diff = now.getTime() - fileAccessTime.toMillis();
+//				if (diff < smallestDifference) {
+//					smallestDifference = diff;
+//				}
+//			}
+//		}
+//		return (FIVEMINUTES < smallestDifference) && fileCount > 0;
+//	}
+/** parse passed uri and download file to passed folder, returns path of downloaded file for further use
+ * */
+	private Path downloadZip(String s3Uri, Path targetDir) throws IOException {
+		AmazonS3URI uri = new AmazonS3URI(s3Uri);
+		String bucket = uri.getBucket();
+		String s3Key = uri.getKey();
+		AmazonS3 s3 = AmazonS3ClientBuilder.defaultClient();
+		S3Object obj = s3.getObject(bucket, s3Key);
+		int index = s3Key.lastIndexOf("/");
+		Path targetPath = targetDir.resolve(s3Key.substring(index, s3Key.length()));
 		try (InputStream in = obj.getObjectContent()) {
 			Files.copy(in, targetPath);
 		}
+		return targetPath;
 	}
+//	/**
+//	 * downloads files from passed prefix to passed folder
+//	 * 
+//	 * requires "s3_DATA_BUCKET" to be set correctly reads s3 settings from config
+//	 * file
+//	 * 
+//	 * @param prefix where files are
+//	 * @param dir    path to directory where files will be placed
+//	 */
+//	private void downloadPrefixToDir(String prefix, Path dir) throws IOException {
+//		XMLConfiguration pc = null;
+//		String bucket = null;
+//		try {
+//			bucket = System.getenv("S3_DATA_BUCKET");
+//		} catch (IllegalArgumentException e) {
+//			log.error("S3 Bucket enviroment variable not set");
+//		}
+//		try {
+//			pc = new XMLConfiguration("s3Config.xml");
+//		} catch (org.apache.commons.configuration.ConfigurationException e) {
+//			log.error("s3 Config-file not found");
+//		}
+//
+//		if (pc.getBoolean("useCustomS3", false)) {
+//			AWSCredentials credentials = new BasicAWSCredentials(pc.getString("S3AccessKeyID"),
+//					pc.getString("S3SecretAccessKey"));
+//			ClientConfiguration clientConfiguration = new ClientConfiguration();
+//			clientConfiguration.setSignerOverride("AWSS3V4SignerType");
+//
+//			s3 = AmazonS3ClientBuilder.standard()
+//					.withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(pc.getString("S3_ENDPOINT"),
+//							Regions.US_EAST_1.name()))
+//					.withPathStyleAccessEnabled(true).withClientConfiguration(clientConfiguration)
+//					.withCredentials(new AWSStaticCredentialsProvider(credentials)).build();
+//		}
+//		if (!Files.exists(dir)) {
+//			Files.createDirectories(dir);
+//		}
+//		String cleanedPrefix = p.matcher(prefix).replaceAll("");
+//		if (!cleanedPrefix.endsWith("/")) {
+//			cleanedPrefix = cleanedPrefix + "/";
+//		}
+//		ObjectListing listing = s3.listObjects(bucket, cleanedPrefix);
+//		for (S3ObjectSummary os : listing.getObjectSummaries()) {
+//			downloadS3ObjectToFolder(cleanedPrefix, dir, os);
+//		}
+//		while (listing.isTruncated()) {
+//			listing = s3.listNextBatchOfObjects(listing);
+//			for (S3ObjectSummary os : listing.getObjectSummaries()) {
+//				downloadS3ObjectToFolder(cleanedPrefix, dir, os);
+//			}
+//		}
+//
+//	}
+
+//	/**
+//	 * downloads file at passed s3 prefix to passed folder
+//	 * 
+//	 * uses object variable s3
+//	 * 
+//	 * @param sourcePrefix prefix of file
+//	 * @param target       path to folder where downloaded file will be placed
+//	 */
+//	private void downloadS3ObjectToFolder(String sourcePrefix, Path target, S3ObjectSummary os) throws IOException {
+//		String key = os.getKey();
+//		Path targetPath = target.resolve(key.replace(sourcePrefix, ""));
+//		S3Object obj = s3.getObject(os.getBucketName(), key);
+//		try (InputStream in = obj.getObjectContent()) {
+//			Files.copy(in, targetPath);
+//		}
+//	}
 
 	private WellcomeEditorialCreationProcess createProcess(Path csvFile, List<Path> tifFiles, Prefs prefs,
 			Process templateNew, Process templateUpdate) throws Exception {
@@ -403,7 +378,8 @@ public class WellcomeEditorialProcessCreation {
 		Files.createDirectories(importDir);
 		log.trace(String.format("Copying %s to %s (size: %d)", csvFile.toAbsolutePath().toString(),
 				importDir.resolve(csvFile.getFileName()).toString(), Files.size(csvFile)));
-		Files.copy(csvFile, importDir.resolve(csvFile.getFileName()));
+		StorageProvider.getInstance().copyFile(csvFile, importDir.resolve(csvFile.getFileName()));
+		// Files.copy(csvFile, importDir.resolve(csvFile.getFileName()));
 
 		Path imagesDir = Paths.get(process.getImagesOrigDirectory(false));
 		count = 0;
@@ -411,7 +387,8 @@ public class WellcomeEditorialProcessCreation {
 			String newFileName = newTifFiles.get(count).getFileName().toString();
 			log.trace(String.format("Copying %s to %s (size: %d)", tifFile.toAbsolutePath().toString(),
 					imagesDir.resolve(newFileName).toString(), Files.size(tifFile)));
-			Files.copy(tifFile, imagesDir.resolve(newFileName));
+			StorageProvider.getInstance().copyFile(tifFile, imagesDir.resolve(newFileName));
+			// Files.copy(tifFile, imagesDir.resolve(newFileName));
 			count++;
 		}
 
