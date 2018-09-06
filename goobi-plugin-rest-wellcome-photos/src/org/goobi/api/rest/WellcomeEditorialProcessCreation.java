@@ -14,7 +14,7 @@ import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import javax.ws.rs.HeaderParam;
+import javax.ws.rs.Consumes;
 import javax.ws.rs.POST;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.Response;
@@ -30,11 +30,17 @@ import org.goobi.beans.Step;
 import org.goobi.managedbeans.LoginBean;
 import org.goobi.production.flow.jobs.HistoryAnalyserJob;
 
+import com.amazonaws.ClientConfiguration;
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
+import com.amazonaws.auth.BasicAWSCredentials;
+import com.amazonaws.client.builder.AwsClientBuilder;
+import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.S3Object;
 
+import de.sub.goobi.config.ConfigurationHelper;
 import de.sub.goobi.helper.BeanHelper;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.ScriptThreadWithoutHibernate;
@@ -67,16 +73,22 @@ public class WellcomeEditorialProcessCreation {
 	private String currentIdentifier;
 	private String currentWellcomeIdentifier;
 //	private static final long FIVEMINUTES = 1000 * 60 * 5;
-//	private static AmazonS3 s3 = null;
+
+//	@javax.ws.rs.Path("/test")
+//	@GET
+//	@Produces("text/plain")
+//	public String testPlugin() {
+//		return "plugin is working";
+//	}
 
 	@javax.ws.rs.Path("/createeditorials")
 	@POST
 	@Produces("text/xml")
-	public Response createNewProcess(@HeaderParam("templateid") int templateNewId,
-			@HeaderParam("updatetemplateid") int templateUpdateId, @HeaderParam("hotfolder") String hotFolder,
-			String s3Uri) {
-
+	@Consumes("application/json")
+	public Response createNewProcess(Creator creator) {
+		System.out.println("json recieved");
 		String workingStorage = System.getenv("WORKING_STORAGE");
+		System.out.println(workingStorage);
 		Path workDir = Paths.get(workingStorage, UUID.randomUUID().toString());
 		try {
 			Files.createDirectories(workDir);
@@ -86,7 +98,7 @@ public class WellcomeEditorialProcessCreation {
 		}
 		// download and unpack zip
 		try {
-			Path zipFile = downloadZip(s3Uri, workDir);//
+			Path zipFile = downloadZip(creator.getBucket(), creator.getKey(), workDir);//
 			unzip(zipFile, workDir);
 			Files.delete(zipFile);
 		} catch (IOException e1) {
@@ -100,20 +112,19 @@ public class WellcomeEditorialProcessCreation {
 //			return resp;
 //		}
 
-		Process templateUpdate = ProcessManager.getProcessById(templateUpdateId);
-		Process templateNew = ProcessManager.getProcessById(templateNewId);
+		Process templateUpdate = ProcessManager.getProcessById(creator.getUpdatetemplateid());
+		Process templateNew = ProcessManager.getProcessById(creator.getTemplateid());
 		if (templateNew == null) {
 			Response resp = Response.status(Response.Status.BAD_REQUEST)
-					.entity(createErrorResponse("Cannot find process template with id " + templateNewId)).build();
+					.entity(createErrorResponse("Cannot find process template with id " + creator.getTemplateid()))
+					.build();
 			return resp;
 		}
 
 		Prefs prefs = templateNew.getRegelsatz().getPreferences();
 		List<WellcomeEditorialCreationProcess> processes = new ArrayList<>();
 
-		try (DirectoryStream<Path> ds = Files.newDirectoryStream(workDir)) {
-			for (Path dir : ds) {
-				log.debug("working with folder " + dir.getFileName());
+		log.debug("working with folder " + workDir.getFileName());
 
 //				if (!checkIfCopyingDone(dir)) {
 //					continue;
@@ -125,48 +136,50 @@ public class WellcomeEditorialProcessCreation {
 //				}
 //				try (OutputStream os = Files.newOutputStream(lockFile)) {
 //				}
-				List<Path> tifFiles = new ArrayList<>();
-				Path csvFile = null;
-				try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(dir)) {
-					for (Path file : folderFiles) {
-						String fileName = file.getFileName().toString();
-						String fileNameLower = fileName.toLowerCase();
-						if (fileNameLower.endsWith(".csv") && !fileNameLower.startsWith(".")) {
-							csvFile = file;
-						}
-						if ((fileNameLower.endsWith(".tif") || fileNameLower.endsWith(".tiff")
-								|| fileNameLower.endsWith(".mp4")) && !fileNameLower.startsWith(".")) {
-							tifFiles.add(file);
-						}
-					}
+		List<Path> tifFiles = new ArrayList<>();
+		Path csvFile = null;
+		try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(workDir)) {
+			for (Path file : folderFiles) {
+				String fileName = file.getFileName().toString();
+				String fileNameLower = fileName.toLowerCase();
+				if (fileNameLower.endsWith(".csv") && !fileNameLower.startsWith(".")) {
+					csvFile = file;
 				}
-				Collections.sort(tifFiles);
-				try {
-					WellcomeEditorialCreationProcess wcp = createProcess(csvFile, tifFiles, prefs, templateNew,
-							templateUpdate);
-					if (wcp == null) {
-						return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-								.entity(createErrorResponse("Cannot import csv file: " + csvFile)).build();
-					}
-					wcp.setSourceFolder(dir.getFileName().toString());
-					processes.add(wcp);
-					if (!(wcp.getProcessId() == 0)) {
+				if ((fileNameLower.endsWith(".tif") || fileNameLower.endsWith(".tiff")
+						|| fileNameLower.endsWith(".mp4")) && !fileNameLower.startsWith(".")) {
+					tifFiles.add(file);
+				}
+			}
+		} catch (IOException e1) {
+			// TODO Auto-generated catch block
+			log.error(e1);
+			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+					.entity(createErrorResponse("Error reading directory: " + csvFile)).build();
+		}
+		Collections.sort(tifFiles);
+		try {
+			WellcomeEditorialCreationProcess wcp = createProcess(csvFile, tifFiles, prefs, templateNew, templateUpdate);
+			if (wcp == null) {
+				return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+						.entity(createErrorResponse("Cannot import csv file: " + csvFile)).build();
+			}
+			wcp.setSourceFolder(workDir.getFileName().toString());
+			processes.add(wcp);
+			if (!(wcp.getProcessId() == 0)) {
 //						// no process created. Delete lockfile and
 //						Files.delete(lockFile);
 //					} else {
-						// process created. Now delete this folder.
-						FileUtils.deleteQuietly(dir.toFile());
-					}
-				} catch (Exception e) {
-					// TODO: this should be collected and be returned as one at the end
-					log.error(e);
-					return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-							.entity(createErrorResponse("Cannot import csv file: " + csvFile)).build();
-				}
+				// process created. Now delete this folder.
+				FileUtils.deleteQuietly(workDir.toFile());
 			}
-		} catch (IOException e) {
-			log.error("Unable to access files in temporary Directory", e);
+		} catch (Exception e) {
+			// TODO: this should be collected and be returned as one at the end
+			e.printStackTrace();
+			log.error(e);
+			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+					.entity(createErrorResponse("Cannot import csv file: " + csvFile)).build();
 		}
+
 		WellcomeEditorialCreationResponse resp = new WellcomeEditorialCreationResponse();
 		resp.setProcesses(processes);
 		resp.setResult("success");
@@ -211,16 +224,36 @@ public class WellcomeEditorialProcessCreation {
 //		}
 //		return (FIVEMINUTES < smallestDifference) && fileCount > 0;
 //	}
-/** parse passed uri and download file to passed folder, returns path of downloaded file for further use
- * */
-	private Path downloadZip(String s3Uri, Path targetDir) throws IOException {
-		AmazonS3URI uri = new AmazonS3URI(s3Uri);
-		String bucket = uri.getBucket();
-		String s3Key = uri.getKey();
-		AmazonS3 s3 = AmazonS3ClientBuilder.defaultClient();
+	/**
+	 * parse passed uri and download file to passed folder, returns path of
+	 * downloaded file for further use
+	 */
+	private Path downloadZip(String bucket, String s3Key, Path targetDir) throws IOException {
+		AmazonS3 s3 = null;// AmazonS3ClientBuilder.defaultClient();
+		ConfigurationHelper conf = ConfigurationHelper.getInstance();
+		if (conf.useCustomS3()) {
+			AWSCredentials credentials = new BasicAWSCredentials(conf.getS3AccessKeyID(), conf.getS3SecretAccessKey());
+			ClientConfiguration clientConfiguration = new ClientConfiguration();
+			clientConfiguration.setSignerOverride("AWSS3V4SignerType");
+
+			s3 = AmazonS3ClientBuilder.standard()
+					.withEndpointConfiguration(
+							new AwsClientBuilder.EndpointConfiguration(conf.getS3Endpoint(), Regions.US_EAST_1.name()))
+					.withPathStyleAccessEnabled(true).withClientConfiguration(clientConfiguration)
+					.withCredentials(new AWSStaticCredentialsProvider(credentials)).build();
+		} else {
+			s3 = AmazonS3ClientBuilder.defaultClient();
+		}
+
 		S3Object obj = s3.getObject(bucket, s3Key);
 		int index = s3Key.lastIndexOf("/");
-		Path targetPath = targetDir.resolve(s3Key.substring(index, s3Key.length()));
+		Path targetPath;
+		if (index != -1) {
+			targetPath = targetDir.resolve(s3Key.substring(index, s3Key.length() - 1));
+		} else {
+			targetPath = targetDir.resolve(s3Key);
+		}
+
 		try (InputStream in = obj.getObjectContent()) {
 			Files.copy(in, targetPath);
 		}
@@ -324,7 +357,7 @@ public class WellcomeEditorialProcessCreation {
 
 		boolean existsInGoobiNotDone = false;
 		List<Process> processes = ProcessManager.getProcesses("",
-				"prozesse.titel=\"" + referenceNumber.replaceAll(" |\t", "_") + "\"");
+				"prozesse.titel='" + referenceNumber.replaceAll(" |\t", "_") + "'");
 		log.debug("found " + processes.size() + " processes with title " + referenceNumber.replaceAll(" |\t", "_"));
 		for (Process p : processes) {
 			if (!p.getSortHelperStatus().equals("100000000")) {
@@ -408,6 +441,9 @@ public class WellcomeEditorialProcessCreation {
 	}
 
 	private boolean checkIfExistsOnS3(final String _reference) {
+		if (ConfigurationHelper.getInstance().useCustomS3()) {
+			return false;
+		}
 		String reference = _reference.replaceAll(" |\t", "_");
 		int refLen = reference.length();
 		String bucket = "wellcomecollection-editorial-photography";
