@@ -1,5 +1,6 @@
 package org.goobi.api.rest;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.DirectoryStream;
@@ -48,6 +49,8 @@ import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.helper.enums.PropertyType;
 import de.sub.goobi.helper.enums.StepEditType;
 import de.sub.goobi.helper.enums.StepStatus;
+import de.sub.goobi.helper.exceptions.DAOException;
+import de.sub.goobi.helper.exceptions.SwapException;
 import de.sub.goobi.persistence.managers.ProcessManager;
 import de.sub.goobi.persistence.managers.PropertyManager;
 import de.sub.goobi.persistence.managers.StepManager;
@@ -62,8 +65,10 @@ import ugh.dl.Person;
 import ugh.dl.Prefs;
 import ugh.exceptions.MetadataTypeNotAllowedException;
 import ugh.exceptions.PreferencesException;
+import ugh.exceptions.ReadException;
 import ugh.exceptions.TypeNotAllowedAsChildException;
 import ugh.exceptions.TypeNotAllowedForParentException;
+import ugh.exceptions.WriteException;
 import ugh.fileformats.mets.MetsMods;
 
 @javax.ws.rs.Path("/wellcome")
@@ -72,29 +77,21 @@ public class WellcomeEditorialProcessCreation {
 
 	private String currentIdentifier;
 	private String currentWellcomeIdentifier;
-//	private static final long FIVEMINUTES = 1000 * 60 * 5;
-
-//	@javax.ws.rs.Path("/test")
-//	@GET
-//	@Produces("text/plain")
-//	public String testPlugin() {
-//		return "plugin is working";
-//	}
 
 	@javax.ws.rs.Path("/createeditorials")
 	@POST
 	@Produces("text/xml")
 	@Consumes("application/json")
 	public Response createNewProcess(Creator creator) {
-		System.out.println("json recieved");
+		
 		String workingStorage = System.getenv("WORKING_STORAGE");
-		System.out.println(workingStorage);
 		Path workDir = Paths.get(workingStorage, UUID.randomUUID().toString());
 		try {
 			Files.createDirectories(workDir);
 		} catch (IOException e1) {
 			log.error("Unable to create temporary directory", e1);
-			log.error(e1);
+			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+					.entity(createErrorResponse("Unable to create temporary directory")).build();
 		}
 		// download and unpack zip
 		try {
@@ -103,14 +100,9 @@ public class WellcomeEditorialProcessCreation {
 			Files.delete(zipFile);
 		} catch (IOException e1) {
 			log.error("Unable to move zip-file contents to working directory", e1);
+			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+					.entity(createErrorResponse("Unable to access temporary directory")).build();
 		}
-
-//		Path hotFolderPath = Paths.get(hotFolder);
-//		if (!Files.exists(hotFolderPath) || !Files.isDirectory(hotFolderPath)) {
-//			Response resp = Response.status(Response.Status.BAD_REQUEST)
-//					.entity(createErrorResponse("Hotfolder does not exist or is no directory " + hotFolder)).build();
-//			return resp;
-//		}
 
 		Process templateUpdate = ProcessManager.getProcessById(creator.getUpdatetemplateid());
 		Process templateNew = ProcessManager.getProcessById(creator.getTemplateid());
@@ -120,22 +112,9 @@ public class WellcomeEditorialProcessCreation {
 					.build();
 			return resp;
 		}
-
 		Prefs prefs = templateNew.getRegelsatz().getPreferences();
 		List<WellcomeEditorialCreationProcess> processes = new ArrayList<>();
-
 		log.debug("working with folder " + workDir.getFileName());
-
-//				if (!checkIfCopyingDone(dir)) {
-//					continue;
-//				}
-
-//				Path lockFile = dir.resolve(".intranda_lock");
-//				if (Files.exists(lockFile)) {
-//					continue;
-//				}
-//				try (OutputStream os = Files.newOutputStream(lockFile)) {
-//				}
 		List<Path> tifFiles = new ArrayList<>();
 		Path csvFile = null;
 		try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(workDir)) {
@@ -151,10 +130,9 @@ public class WellcomeEditorialProcessCreation {
 				}
 			}
 		} catch (IOException e1) {
-			// TODO Auto-generated catch block
 			log.error(e1);
 			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-					.entity(createErrorResponse("Error reading directory: " + csvFile)).build();
+					.entity(createErrorResponse("Error reading directory: " + workDir)).build();
 		}
 		Collections.sort(tifFiles);
 		try {
@@ -166,18 +144,18 @@ public class WellcomeEditorialProcessCreation {
 			wcp.setSourceFolder(workDir.getFileName().toString());
 			processes.add(wcp);
 			if (!(wcp.getProcessId() == 0)) {
-//						// no process created. Delete lockfile and
-//						Files.delete(lockFile);
-//					} else {
 				// process created. Now delete this folder.
 				FileUtils.deleteQuietly(workDir.toFile());
 			}
-		} catch (Exception e) {
-			// TODO: this should be collected and be returned as one at the end
-			e.printStackTrace();
-			log.error(e);
+		} catch (FileNotFoundException e) {
+			log.error("Cannot import csv file: " + csvFile + "\n", e);
 			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
 					.entity(createErrorResponse("Cannot import csv file: " + csvFile)).build();
+		} catch (PreferencesException | WriteException | ReadException | IOException | InterruptedException
+				| SwapException | DAOException e) {
+			log.error("Unable to create Goobi Process\n", e);
+			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+					.entity(createErrorResponse("Unable to create Goobi Process")).build();
 		}
 
 		WellcomeEditorialCreationResponse resp = new WellcomeEditorialCreationResponse();
@@ -186,7 +164,7 @@ public class WellcomeEditorialProcessCreation {
 		return Response.status(Response.Status.OK).entity(resp).build();
 	}
 
-	private void unzip(final Path zipFile, final Path output) {
+	private void unzip(final Path zipFile, final Path output) throws IOException {
 		try (ZipInputStream zipInputStream = new ZipInputStream(Files.newInputStream(zipFile))) {
 			ZipEntry entry;
 			while ((entry = zipInputStream.getNextEntry()) != null) {
@@ -197,33 +175,9 @@ public class WellcomeEditorialProcessCreation {
 					Files.copy(zipInputStream, toPath);
 				}
 			}
-		} catch (IOException e) {
-			log.error(e);
 		}
 	}
 
-//	private boolean checkIfCopyingDone(Path dir) throws IOException {
-//		if (!Files.isDirectory(dir)) {
-//			return false;
-//		}
-//		Date now = new Date();
-//		FileTime dirAccessTime = Files.readAttributes(dir, BasicFileAttributes.class).lastModifiedTime();
-//		log.debug("now: " + now + " dirAccessTime: " + dirAccessTime);
-//		long smallestDifference = now.getTime() - dirAccessTime.toMillis();
-//		int fileCount = 0;
-//		try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(dir)) {
-//			for (Path file : folderFiles) {
-//				fileCount++;
-//				FileTime fileAccessTime = Files.readAttributes(file, BasicFileAttributes.class).lastModifiedTime();
-//				log.debug("now: " + now + " fileAccessTime: " + fileAccessTime);
-//				long diff = now.getTime() - fileAccessTime.toMillis();
-//				if (diff < smallestDifference) {
-//					smallestDifference = diff;
-//				}
-//			}
-//		}
-//		return (FIVEMINUTES < smallestDifference) && fileCount > 0;
-//	}
 	/**
 	 * parse passed uri and download file to passed folder, returns path of
 	 * downloaded file for further use
@@ -259,80 +213,10 @@ public class WellcomeEditorialProcessCreation {
 		}
 		return targetPath;
 	}
-//	/**
-//	 * downloads files from passed prefix to passed folder
-//	 * 
-//	 * requires "s3_DATA_BUCKET" to be set correctly reads s3 settings from config
-//	 * file
-//	 * 
-//	 * @param prefix where files are
-//	 * @param dir    path to directory where files will be placed
-//	 */
-//	private void downloadPrefixToDir(String prefix, Path dir) throws IOException {
-//		XMLConfiguration pc = null;
-//		String bucket = null;
-//		try {
-//			bucket = System.getenv("S3_DATA_BUCKET");
-//		} catch (IllegalArgumentException e) {
-//			log.error("S3 Bucket enviroment variable not set");
-//		}
-//		try {
-//			pc = new XMLConfiguration("s3Config.xml");
-//		} catch (org.apache.commons.configuration.ConfigurationException e) {
-//			log.error("s3 Config-file not found");
-//		}
-//
-//		if (pc.getBoolean("useCustomS3", false)) {
-//			AWSCredentials credentials = new BasicAWSCredentials(pc.getString("S3AccessKeyID"),
-//					pc.getString("S3SecretAccessKey"));
-//			ClientConfiguration clientConfiguration = new ClientConfiguration();
-//			clientConfiguration.setSignerOverride("AWSS3V4SignerType");
-//
-//			s3 = AmazonS3ClientBuilder.standard()
-//					.withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(pc.getString("S3_ENDPOINT"),
-//							Regions.US_EAST_1.name()))
-//					.withPathStyleAccessEnabled(true).withClientConfiguration(clientConfiguration)
-//					.withCredentials(new AWSStaticCredentialsProvider(credentials)).build();
-//		}
-//		if (!Files.exists(dir)) {
-//			Files.createDirectories(dir);
-//		}
-//		String cleanedPrefix = p.matcher(prefix).replaceAll("");
-//		if (!cleanedPrefix.endsWith("/")) {
-//			cleanedPrefix = cleanedPrefix + "/";
-//		}
-//		ObjectListing listing = s3.listObjects(bucket, cleanedPrefix);
-//		for (S3ObjectSummary os : listing.getObjectSummaries()) {
-//			downloadS3ObjectToFolder(cleanedPrefix, dir, os);
-//		}
-//		while (listing.isTruncated()) {
-//			listing = s3.listNextBatchOfObjects(listing);
-//			for (S3ObjectSummary os : listing.getObjectSummaries()) {
-//				downloadS3ObjectToFolder(cleanedPrefix, dir, os);
-//			}
-//		}
-//
-//	}
-
-//	/**
-//	 * downloads file at passed s3 prefix to passed folder
-//	 * 
-//	 * uses object variable s3
-//	 * 
-//	 * @param sourcePrefix prefix of file
-//	 * @param target       path to folder where downloaded file will be placed
-//	 */
-//	private void downloadS3ObjectToFolder(String sourcePrefix, Path target, S3ObjectSummary os) throws IOException {
-//		String key = os.getKey();
-//		Path targetPath = target.resolve(key.replace(sourcePrefix, ""));
-//		S3Object obj = s3.getObject(os.getBucketName(), key);
-//		try (InputStream in = obj.getObjectContent()) {
-//			Files.copy(in, targetPath);
-//		}
-//	}
 
 	private WellcomeEditorialCreationProcess createProcess(Path csvFile, List<Path> tifFiles, Prefs prefs,
-			Process templateNew, Process templateUpdate) throws Exception {
+			Process templateNew, Process templateUpdate) throws FileNotFoundException, IOException,
+			InterruptedException, SwapException, DAOException, PreferencesException, WriteException, ReadException {
 		CSVUtil csv = new CSVUtil(csvFile);
 		String referenceNumber = csv.getValue("Reference", 0);
 		List<Path> newTifFiles = new ArrayList<>();
@@ -412,7 +296,6 @@ public class WellcomeEditorialProcessCreation {
 		log.trace(String.format("Copying %s to %s (size: %d)", csvFile.toAbsolutePath().toString(),
 				importDir.resolve(csvFile.getFileName()).toString(), Files.size(csvFile)));
 		StorageProvider.getInstance().copyFile(csvFile, importDir.resolve(csvFile.getFileName()));
-		// Files.copy(csvFile, importDir.resolve(csvFile.getFileName()));
 
 		Path imagesDir = Paths.get(process.getImagesOrigDirectory(false));
 		count = 0;
@@ -421,7 +304,6 @@ public class WellcomeEditorialProcessCreation {
 			log.trace(String.format("Copying %s to %s (size: %d)", tifFile.toAbsolutePath().toString(),
 					imagesDir.resolve(newFileName).toString(), Files.size(tifFile)));
 			StorageProvider.getInstance().copyFile(tifFile, imagesDir.resolve(newFileName));
-			// Files.copy(tifFile, imagesDir.resolve(newFileName));
 			count++;
 		}
 
@@ -590,7 +472,8 @@ public class WellcomeEditorialProcessCreation {
 		return process;
 	}
 
-	public void NeuenProzessAnlegen(Process process, Process template, Fileformat ff, Prefs prefs) throws Exception {
+	public void NeuenProzessAnlegen(Process process, Process template, Fileformat ff, Prefs prefs) throws DAOException,
+			PreferencesException, IOException, InterruptedException, SwapException, WriteException, ReadException {
 
 		for (Step step : process.getSchritteList()) {
 
