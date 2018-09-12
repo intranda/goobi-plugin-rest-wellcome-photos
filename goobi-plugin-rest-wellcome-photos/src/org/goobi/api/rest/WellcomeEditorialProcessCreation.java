@@ -87,7 +87,7 @@ public class WellcomeEditorialProcessCreation {
 		String workingStorage = System.getenv("WORKING_STORAGE");
 		Path workDir = Paths.get(workingStorage, UUID.randomUUID().toString());
 		try {
-			Files.createDirectories(workDir);
+			StorageProvider.getInstance().createDirectories(workDir);
 		} catch (IOException e1) {
 			log.error("Unable to create temporary directory", e1);
 			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
@@ -97,7 +97,7 @@ public class WellcomeEditorialProcessCreation {
 		try {
 			Path zipFile = downloadZip(creator.getBucket(), creator.getKey(), workDir);//
 			unzip(zipFile, workDir);
-			Files.delete(zipFile);
+			StorageProvider.getInstance().deleteFile(zipFile);
 		} catch (IOException e1) {
 			log.error("Unable to move zip-file contents to working directory", e1);
 			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
