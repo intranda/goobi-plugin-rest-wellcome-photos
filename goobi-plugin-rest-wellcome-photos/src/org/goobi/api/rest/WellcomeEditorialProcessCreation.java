@@ -83,7 +83,7 @@ public class WellcomeEditorialProcessCreation {
 	@Produces("text/xml")
 	@Consumes("application/json")
 	public Response createNewProcess(Creator creator) {
-		
+
 		String workingStorage = System.getenv("WORKING_STORAGE");
 		Path workDir = Paths.get(workingStorage, UUID.randomUUID().toString());
 		try {
@@ -95,9 +95,10 @@ public class WellcomeEditorialProcessCreation {
 		}
 		// download and unpack zip
 		try {
-			Path zipFile = downloadZip(creator.getBucket(), creator.getKey(), workDir);//
+			Path zipFile = downloadZip(creator.getBucket(), creator.getKey(), workDir);
 			unzip(zipFile, workDir);
-			StorageProvider.getInstance().deleteFile(zipFile);
+			Files.delete(zipFile);
+//			StorageProvider.getInstance().deleteFile(zipFile);
 		} catch (IOException e1) {
 			log.error("Unable to move zip-file contents to working directory", e1);
 			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
@@ -143,7 +144,7 @@ public class WellcomeEditorialProcessCreation {
 			}
 			wcp.setSourceFolder(workDir.getFileName().toString());
 			processes.add(wcp);
-			if (!(wcp.getProcessId() == 0)) {
+			if (wcp.getProcessId() != 0) {
 				// process created. Now delete this folder.
 				FileUtils.deleteQuietly(workDir.toFile());
 			}
@@ -200,7 +201,7 @@ public class WellcomeEditorialProcessCreation {
 		}
 
 		S3Object obj = s3.getObject(bucket, s3Key);
-		int index = s3Key.lastIndexOf("/");
+		int index = s3Key.lastIndexOf('/');
 		Path targetPath;
 		if (index != -1) {
 			targetPath = targetDir.resolve(s3Key.substring(index, s3Key.length() - 1));
@@ -244,7 +245,7 @@ public class WellcomeEditorialProcessCreation {
 				"prozesse.titel='" + referenceNumber.replaceAll(" |\t", "_") + "'");
 		log.debug("found " + processes.size() + " processes with title " + referenceNumber.replaceAll(" |\t", "_"));
 		for (Process p : processes) {
-			if (!p.getSortHelperStatus().equals("100000000")) {
+			if (!"100000000".equals(p.getSortHelperStatus())) {
 				existsInGoobiNotDone = true;
 				break;
 			}
@@ -253,8 +254,7 @@ public class WellcomeEditorialProcessCreation {
 
 		if (existsInGoobiNotDone) {
 			// does exist in Goobi, but is not done => wait (return error)
-			WellcomeEditorialCreationProcess wecp = new WellcomeEditorialCreationProcess();
-			return wecp;
+			return new WellcomeEditorialCreationProcess();
 		} else if (existsOnS3) {
 			// is already on s3, but everything in Goobi went through => update
 			process = cloneTemplate(templateUpdate);
@@ -504,7 +504,7 @@ public class WellcomeEditorialProcessCreation {
 			MetadataType mdt = prefs.getMetadataTypeByName("pathimagefiles");
 			List<? extends Metadata> alleImagepfade = ff.getDigitalDocument().getPhysicalDocStruct()
 					.getAllMetadataByType(mdt);
-			if (alleImagepfade != null && alleImagepfade.size() > 0) {
+			if (alleImagepfade != null && !alleImagepfade.isEmpty()) {
 				for (Metadata md : alleImagepfade) {
 					ff.getDigitalDocument().getPhysicalDocStruct().getAllMetadata().remove(md);
 				}
