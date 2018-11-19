@@ -39,6 +39,7 @@ import com.amazonaws.client.builder.AwsClientBuilder;
 import com.amazonaws.regions.Regions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.S3Object;
 
 import de.sub.goobi.config.ConfigurationHelper;
@@ -78,7 +79,6 @@ public class WellcomeEditorialProcessCreation {
 	private String currentIdentifier;
 	private String currentWellcomeIdentifier;
 
-
 	@javax.ws.rs.Path("/createeditorials")
 	@POST
 	@Produces("text/xml")
@@ -104,15 +104,19 @@ public class WellcomeEditorialProcessCreation {
 			log.error("Unable to move zip-file contents to working directory", e1);
 			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
 					.entity(createErrorResponse("Unable to access temporary directory")).build();
+		} catch (AmazonS3Exception e) {
+			log.error(e.getErrorMessage(), e);
+			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
+					.entity(createErrorResponse(
+							"Unable to download file " + creator.getKey() + " from bucket " + creator.getBucket()))
+					.build();
 		}
-
 		Process templateUpdate = ProcessManager.getProcessById(creator.getUpdatetemplateid());
 		Process templateNew = ProcessManager.getProcessById(creator.getTemplateid());
 		if (templateNew == null) {
-			Response resp = Response.status(Response.Status.BAD_REQUEST)
+			return Response.status(Response.Status.BAD_REQUEST)
 					.entity(createErrorResponse("Cannot find process template with id " + creator.getTemplateid()))
 					.build();
-			return resp;
 		}
 		Prefs prefs = templateNew.getRegelsatz().getPreferences();
 		List<WellcomeEditorialCreationProcess> processes = new ArrayList<>();
