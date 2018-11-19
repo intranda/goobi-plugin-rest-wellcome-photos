@@ -78,6 +78,7 @@ public class WellcomeEditorialProcessCreation {
 	private String currentIdentifier;
 	private String currentWellcomeIdentifier;
 
+
 	@javax.ws.rs.Path("/createeditorials")
 	@POST
 	@Produces("text/xml")
