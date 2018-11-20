@@ -3,10 +3,6 @@ package org.goobi.api.rest;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
-
-import lombok.extern.log4j.Log4j2;
-
-@Log4j2
 public class PluginInfo {
 	public static void main(String[] args) {
 		
@@ -23,7 +19,7 @@ public class PluginInfo {
 			System.out.println("templateid: the id of the process template to use for a new process");
 			System.out.println("updatetemplateid: the id of the process template to use to update an existing process");
 		} catch (IOException e) {
-			log.error("could not open version.properties",e);
+			System.out.println("could not open version.properties");
 		}
 	}
 

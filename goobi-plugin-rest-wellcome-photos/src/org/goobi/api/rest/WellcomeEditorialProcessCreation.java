@@ -20,6 +20,8 @@ import javax.ws.rs.POST;
 import javax.ws.rs.Produces;
 import javax.ws.rs.core.Response;
 
+import org.apache.commons.configuration.ConfigurationException;
+import org.apache.commons.configuration.XMLConfiguration;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.SystemUtils;
@@ -84,7 +86,6 @@ public class WellcomeEditorialProcessCreation {
 	@Produces("text/xml")
 	@Consumes("application/json")
 	public Response createNewProcess(Creator creator) {
-
 		String workingStorage = System.getenv("WORKING_STORAGE");
 		Path workDir = Paths.get(workingStorage, UUID.randomUUID().toString());
 		try {
@@ -331,9 +332,18 @@ public class WellcomeEditorialProcessCreation {
 		if (ConfigurationHelper.getInstance().useCustomS3()) {
 			return false;
 		}
+		String bucket;
+		try {
+			XMLConfiguration config = new XMLConfiguration(
+					"/opt/digiverso/goobi/config/plugin_wellcome_editorial_process_creation.xml");
+			bucket = config.getString("bucket", "wellcomecollection-editorial-photography");// "wellcomecollection-editorial-photography";
+			log.debug("using bucket " + bucket);
+		} catch (ConfigurationException e) {
+			bucket = "wellcomecollection-editorial-photography";
+			log.debug("using bucket  wellcomecollection-editorial-photography");
+		}
 		String reference = _reference.replaceAll(" |\t", "_");
 		int refLen = reference.length();
-		String bucket = "wellcomecollection-editorial-photography";
 		String keyPrefix = reference.substring(refLen - 2, refLen) + "/" + reference + "/";
 		String key = keyPrefix + reference + ".xml";
 		AmazonS3 s3client = AmazonS3ClientBuilder.defaultClient();
