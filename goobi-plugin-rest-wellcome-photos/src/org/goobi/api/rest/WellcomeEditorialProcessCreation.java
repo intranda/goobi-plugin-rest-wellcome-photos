@@ -153,6 +153,7 @@ public class WellcomeEditorialProcessCreation {
 			if (wcp.getProcessId() != 0) {
 				// process created. Now delete this folder.
 				FileUtils.deleteQuietly(workDir.toFile());
+				deleteFileFromS3(creator.getBucket(), creator.getKey());
 			}
 		} catch (FileNotFoundException e) {
 			log.error("Cannot import csv file: " + csvFile + "\n", e);
@@ -183,6 +184,25 @@ public class WellcomeEditorialProcessCreation {
 				}
 			}
 		}
+	}
+
+	private void deleteFileFromS3(String bucket, String s3Key) {
+		AmazonS3 s3 = null;// AmazonS3ClientBuilder.defaultClient();
+		ConfigurationHelper conf = ConfigurationHelper.getInstance();
+		if (conf.useCustomS3()) {
+			AWSCredentials credentials = new BasicAWSCredentials(conf.getS3AccessKeyID(), conf.getS3SecretAccessKey());
+			ClientConfiguration clientConfiguration = new ClientConfiguration();
+			clientConfiguration.setSignerOverride("AWSS3V4SignerType");
+
+			s3 = AmazonS3ClientBuilder.standard()
+					.withEndpointConfiguration(
+							new AwsClientBuilder.EndpointConfiguration(conf.getS3Endpoint(), Regions.US_EAST_1.name()))
+					.withPathStyleAccessEnabled(true).withClientConfiguration(clientConfiguration)
+					.withCredentials(new AWSStaticCredentialsProvider(credentials)).build();
+		} else {
+			s3 = AmazonS3ClientBuilder.defaultClient();
+		}
+		s3.deleteObject(bucket, s3Key);
 	}
 
 	/**
@@ -340,7 +360,7 @@ public class WellcomeEditorialProcessCreation {
 			log.debug("using bucket " + bucket);
 		} catch (ConfigurationException e) {
 			bucket = "wellcomecollection-editorial-photography";
-			log.debug("using bucket  wellcomecollection-editorial-photography");
+			log.debug("using bucket " + bucket);
 		}
 		String reference = _reference.replaceAll(" |\t", "_");
 		int refLen = reference.length();
