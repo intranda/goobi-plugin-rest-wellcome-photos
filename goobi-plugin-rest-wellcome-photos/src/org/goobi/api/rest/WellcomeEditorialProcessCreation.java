@@ -175,6 +175,7 @@ public class WellcomeEditorialProcessCreation {
         if (wcp.getProcessId() == 0) {
             resp.setErrorText("did not create process because unfinished processes are still in Goobi");
             resp.setResult("error");
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(resp).build();
         }
         resp.setProcess(wcp);
         resp.setResult("success");
