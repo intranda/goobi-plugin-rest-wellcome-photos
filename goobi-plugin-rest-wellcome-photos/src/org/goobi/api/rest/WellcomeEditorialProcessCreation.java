@@ -81,6 +81,80 @@ public class WellcomeEditorialProcessCreation {
     private String currentIdentifier;
     private String currentWellcomeIdentifier;
 
+    @javax.ws.rs.Path("/uploadzip")
+    @POST
+    @Produces("text/xml")
+    @Consumes("application/json")
+    public Response uploadDataToExistingProcess(Creator creator) {
+
+        String processName = creator.getKey();
+        int index = processName.lastIndexOf('/');
+        if (index != -1) {
+            processName.substring(index, processName.length() - 1);
+        }
+        processName = processName.replace(".zip", "");
+        // exact search
+        Process process = ProcessManager.getProcessByExactTitle(processName);
+        if (process == null) {
+            // like search
+            process = ProcessManager.getProcessByTitle(processName);
+        }
+        if (process == null) {
+            return Response.status(Response.Status.BAD_REQUEST).entity(createErrorResponse("Cannot find process with title " + processName)).build();
+        }
+        String workingStorage = System.getenv("WORKING_STORAGE");
+        Path workDir = Paths.get(workingStorage, UUID.randomUUID().toString());
+        Response zipResponse = handleZipFile(creator, workDir);
+        if (zipResponse != null) {
+            return zipResponse;
+        }
+        // alto files are imported into alto directory
+        List<Path> altoFiles = new ArrayList<>();
+        // objects are imported into the master directory
+        List<Path> objectFiles = new ArrayList<>();
+
+        try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(workDir)) {
+            for (Path file : folderFiles) {
+                String fileName = file.getFileName().toString();
+                String fileNameLower = fileName.toLowerCase();
+                if (fileNameLower.endsWith(".xml") && !fileNameLower.startsWith(".")) {
+                    altoFiles.add(file);
+                } else if (!fileNameLower.startsWith(".")) {
+                    objectFiles.add(file);
+                }
+            }
+        } catch (IOException e1) {
+            log.error(e1);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Error reading directory: " + workDir)).build();
+        }
+
+        try {
+            Path imagesDir = Paths.get(process.getImagesOrigDirectory(false));
+            for (Path object : objectFiles) {
+                StorageProvider.getInstance().copyFile(object, imagesDir.resolve(object.getFileName()));
+            }
+        } catch (IOException | InterruptedException | SwapException | DAOException e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Cannot copy files to master directory"))
+                    .build();
+        }
+
+        try {
+            Path altoDir = Paths.get(process.getOcrAltoDirectory());
+
+            for (Path alto : altoFiles) {
+                StorageProvider.getInstance().copyFile(alto, altoDir.resolve(alto.getFileName()));
+            }
+        } catch (IOException | InterruptedException | SwapException | DAOException e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Cannot copy files to alto directory")).build();
+        }
+
+        // finally cleanup temporary files
+        FileUtils.deleteQuietly(workDir.toFile());
+        deleteFileFromS3(creator.getBucket(), creator.getKey());
+
+        return null;
+    }
+
     @javax.ws.rs.Path("/createeditorials")
     @POST
     @Produces("text/xml")
@@ -88,38 +162,15 @@ public class WellcomeEditorialProcessCreation {
     public Response createNewProcess(Creator creator) {
         String workingStorage = System.getenv("WORKING_STORAGE");
         Path workDir = Paths.get(workingStorage, UUID.randomUUID().toString());
-        try {
-            StorageProvider.getInstance().createDirectories(workDir);
-        } catch (IOException e1) {
-            log.error("Unable to create temporary directory", e1);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(createErrorResponse("Unable to create temporary directory"))
-                    .build();
-        }
-        // download and unpack zip
-        try {
-            Path zipFile = downloadZip(creator.getBucket(), creator.getKey(), workDir);
-            unzip(zipFile, workDir);
-            Files.delete(zipFile);
-            //			StorageProvider.getInstance().deleteFile(zipFile);
-        } catch (IOException e1) {
-            log.error("Unable to move zip-file contents to working directory", e1);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(createErrorResponse("Unable to access temporary directory"))
-                    .build();
-        } catch (AmazonS3Exception e) {
-            log.error(e.getErrorMessage(), e);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(createErrorResponse(
-                            "Unable to download file " + creator.getKey() + " from bucket " + creator.getBucket()))
-                    .build();
+        Response zipResponse = handleZipFile(creator, workDir);
+        if (zipResponse != null) {
+            return zipResponse;
         }
         Process templateUpdate = ProcessManager.getProcessById(creator.getUpdatetemplateid());
         Process templateNew = ProcessManager.getProcessById(creator.getTemplateid());
         if (templateNew == null) {
-            return Response.status(Response.Status.BAD_REQUEST)
-                    .entity(createErrorResponse("Cannot find process template with id " + creator.getTemplateid()))
-                    .build();
+            return Response.status(Response.Status.BAD_REQUEST).entity(createErrorResponse("Cannot find process template with id " + creator
+                    .getTemplateid())).build();
         }
         Prefs prefs = templateNew.getRegelsatz().getPreferences();
         log.debug("working with folder " + workDir.getFileName());
@@ -132,24 +183,21 @@ public class WellcomeEditorialProcessCreation {
                 if (fileNameLower.endsWith(".csv") && !fileNameLower.startsWith(".")) {
                     csvFile = file;
                 }
-                if ((fileNameLower.endsWith(".tif") || fileNameLower.endsWith(".tiff")
-                        || fileNameLower.endsWith(".mp4")) && !fileNameLower.startsWith(".")) {
+                if ((fileNameLower.endsWith(".tif") || fileNameLower.endsWith(".tiff") || fileNameLower.endsWith(".mp4")) && !fileNameLower
+                        .startsWith(".")) {
                     tifFiles.add(file);
                 }
             }
         } catch (IOException e1) {
             log.error(e1);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(createErrorResponse("Error reading directory: " + workDir))
-                    .build();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Error reading directory: " + workDir)).build();
         }
         Collections.sort(tifFiles);
         WellcomeEditorialCreationProcess wcp;
         try {
             wcp = createProcess(csvFile, tifFiles, prefs, templateNew, templateUpdate);
             if (wcp == null) {
-                return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                        .entity(createErrorResponse("Cannot import csv file: " + csvFile))
+                return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Cannot import csv file: " + csvFile))
                         .build();
             }
             wcp.setSourceFolder(workDir.getFileName().toString());
@@ -160,15 +208,10 @@ public class WellcomeEditorialProcessCreation {
             }
         } catch (FileNotFoundException e) {
             log.error("Cannot import csv file: " + csvFile + "\n", e);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(createErrorResponse("Cannot import csv file: " + csvFile))
-                    .build();
-        } catch (PreferencesException | WriteException | ReadException | IOException | InterruptedException
-                | SwapException | DAOException e) {
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Cannot import csv file: " + csvFile)).build();
+        } catch (PreferencesException | WriteException | ReadException | IOException | InterruptedException | SwapException | DAOException e) {
             log.error("Unable to create Goobi Process\n", e);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-                    .entity(createErrorResponse("Unable to create Goobi Process"))
-                    .build();
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Unable to create Goobi Process")).build();
         }
 
         WellcomeEditorialCreationResponse resp = new WellcomeEditorialCreationResponse();
@@ -180,6 +223,30 @@ public class WellcomeEditorialProcessCreation {
         resp.setProcess(wcp);
         resp.setResult("success");
         return Response.status(Response.Status.OK).entity(resp).build();
+    }
+
+    private Response handleZipFile(Creator creator, Path workDir) {
+        try {
+            StorageProvider.getInstance().createDirectories(workDir);
+        } catch (IOException e1) {
+            log.error("Unable to create temporary directory", e1);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Unable to create temporary directory")).build();
+        }
+        // download and unpack zip
+        try {
+            Path zipFile = downloadZip(creator.getBucket(), creator.getKey(), workDir);
+            unzip(zipFile, workDir);
+            Files.delete(zipFile);
+            //			StorageProvider.getInstance().deleteFile(zipFile);
+        } catch (IOException e1) {
+            log.error("Unable to move zip-file contents to working directory", e1);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Unable to access temporary directory")).build();
+        } catch (AmazonS3Exception e) {
+            log.error(e.getErrorMessage(), e);
+            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Unable to download file " + creator.getKey()
+            + " from bucket " + creator.getBucket())).build();
+        }
+        return null;
     }
 
     private void unzip(final Path zipFile, final Path output) throws IOException {
@@ -204,13 +271,9 @@ public class WellcomeEditorialProcessCreation {
             ClientConfiguration clientConfiguration = new ClientConfiguration();
             clientConfiguration.setSignerOverride("AWSS3V4SignerType");
 
-            s3 = AmazonS3ClientBuilder.standard()
-                    .withEndpointConfiguration(
-                            new AwsClientBuilder.EndpointConfiguration(conf.getS3Endpoint(), Regions.US_EAST_1.name()))
-                    .withPathStyleAccessEnabled(true)
-                    .withClientConfiguration(clientConfiguration)
-                    .withCredentials(new AWSStaticCredentialsProvider(credentials))
-                    .build();
+            s3 = AmazonS3ClientBuilder.standard().withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(conf.getS3Endpoint(),
+                    Regions.US_EAST_1.name())).withPathStyleAccessEnabled(true).withClientConfiguration(clientConfiguration).withCredentials(
+                            new AWSStaticCredentialsProvider(credentials)).build();
         } else {
             s3 = AmazonS3ClientBuilder.defaultClient();
         }
@@ -228,13 +291,9 @@ public class WellcomeEditorialProcessCreation {
             ClientConfiguration clientConfiguration = new ClientConfiguration();
             clientConfiguration.setSignerOverride("AWSS3V4SignerType");
 
-            s3 = AmazonS3ClientBuilder.standard()
-                    .withEndpointConfiguration(
-                            new AwsClientBuilder.EndpointConfiguration(conf.getS3Endpoint(), Regions.US_EAST_1.name()))
-                    .withPathStyleAccessEnabled(true)
-                    .withClientConfiguration(clientConfiguration)
-                    .withCredentials(new AWSStaticCredentialsProvider(credentials))
-                    .build();
+            s3 = AmazonS3ClientBuilder.standard().withEndpointConfiguration(new AwsClientBuilder.EndpointConfiguration(conf.getS3Endpoint(),
+                    Regions.US_EAST_1.name())).withPathStyleAccessEnabled(true).withClientConfiguration(clientConfiguration).withCredentials(
+                            new AWSStaticCredentialsProvider(credentials)).build();
         } else {
             s3 = AmazonS3ClientBuilder.defaultClient();
         }
@@ -254,9 +313,9 @@ public class WellcomeEditorialProcessCreation {
         return targetPath;
     }
 
-    private WellcomeEditorialCreationProcess createProcess(Path csvFile, List<Path> tifFiles, Prefs prefs,
-            Process templateNew, Process templateUpdate) throws FileNotFoundException, IOException,
-            InterruptedException, SwapException, DAOException, PreferencesException, WriteException, ReadException {
+    private WellcomeEditorialCreationProcess createProcess(Path csvFile, List<Path> tifFiles, Prefs prefs, Process templateNew,
+            Process templateUpdate) throws FileNotFoundException, IOException, InterruptedException, SwapException, DAOException,
+    PreferencesException, WriteException, ReadException {
         CSVUtil csv = new CSVUtil(csvFile);
         String referenceNumber = csv.getValue("Reference", 0);
         List<Path> newTifFiles = new ArrayList<>();
@@ -280,8 +339,7 @@ public class WellcomeEditorialProcessCreation {
         Process process = null;
 
         boolean existsInGoobiNotDone = false;
-        List<Process> processes = ProcessManager.getProcesses("",
-                "prozesse.titel='" + referenceNumber.replaceAll(" |\t", "_") + "'");
+        List<Process> processes = ProcessManager.getProcesses("", "prozesse.titel='" + referenceNumber.replaceAll(" |\t", "_") + "'");
         log.debug("found " + processes.size() + " processes with title " + referenceNumber.replaceAll(" |\t", "_"));
         for (Process p : processes) {
             if (!"100000000".equals(p.getSortHelperStatus())) {
@@ -335,16 +393,16 @@ public class WellcomeEditorialProcessCreation {
         Path processDir = Paths.get(process.getProcessDataDirectory());
         Path importDir = processDir.resolve("import");
         Files.createDirectories(importDir);
-        log.trace(String.format("Copying %s to %s (size: %d)", csvFile.toAbsolutePath().toString(),
-                importDir.resolve(csvFile.getFileName()).toString(), Files.size(csvFile)));
+        log.trace(String.format("Copying %s to %s (size: %d)", csvFile.toAbsolutePath().toString(), importDir.resolve(csvFile.getFileName())
+                .toString(), Files.size(csvFile)));
         StorageProvider.getInstance().copyFile(csvFile, importDir.resolve(csvFile.getFileName()));
 
         Path imagesDir = Paths.get(process.getImagesOrigDirectory(false));
         count = 0;
         for (Path tifFile : tifFiles) {
             String newFileName = newTifFiles.get(count).getFileName().toString();
-            log.trace(String.format("Copying %s to %s (size: %d)", tifFile.toAbsolutePath().toString(),
-                    imagesDir.resolve(newFileName).toString(), Files.size(tifFile)));
+            log.trace(String.format("Copying %s to %s (size: %d)", tifFile.toAbsolutePath().toString(), imagesDir.resolve(newFileName).toString(),
+                    Files.size(tifFile)));
             StorageProvider.getInstance().copyFile(tifFile, imagesDir.resolve(newFileName));
             count++;
         }
@@ -370,8 +428,7 @@ public class WellcomeEditorialProcessCreation {
         }
         String bucket;
         try {
-            XMLConfiguration config = new XMLConfiguration(
-                    "/opt/digiverso/goobi/config/plugin_wellcome_editorial_process_creation.xml");
+            XMLConfiguration config = new XMLConfiguration("/opt/digiverso/goobi/config/plugin_wellcome_editorial_process_creation.xml");
             bucket = config.getString("bucket", "wellcomecollection-editorial-photography");// "wellcomecollection-editorial-photography";
             log.debug("using bucket " + bucket);
         } catch (ConfigurationException e) {
@@ -523,8 +580,8 @@ public class WellcomeEditorialProcessCreation {
         return process;
     }
 
-    public void NeuenProzessAnlegen(Process process, Process template, Fileformat ff, Prefs prefs) throws DAOException,
-            PreferencesException, IOException, InterruptedException, SwapException, WriteException, ReadException {
+    public void NeuenProzessAnlegen(Process process, Process template, Fileformat ff, Prefs prefs) throws DAOException, PreferencesException,
+    IOException, InterruptedException, SwapException, WriteException, ReadException {
 
         for (Step step : process.getSchritteList()) {
 
@@ -553,9 +610,7 @@ public class WellcomeEditorialProcessCreation {
          */
         try {
             MetadataType mdt = prefs.getMetadataTypeByName("pathimagefiles");
-            List<? extends Metadata> alleImagepfade = ff.getDigitalDocument()
-                    .getPhysicalDocStruct()
-                    .getAllMetadataByType(mdt);
+            List<? extends Metadata> alleImagepfade = ff.getDigitalDocument().getPhysicalDocStruct().getAllMetadataByType(mdt);
             if (alleImagepfade != null && !alleImagepfade.isEmpty()) {
                 for (Metadata md : alleImagepfade) {
                     ff.getDigitalDocument().getPhysicalDocStruct().getAllMetadata().remove(md);
