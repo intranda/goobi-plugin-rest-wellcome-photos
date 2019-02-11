@@ -152,7 +152,14 @@ public class WellcomeEditorialProcessCreation {
         FileUtils.deleteQuietly(workDir.toFile());
         deleteFileFromS3(creator.getBucket(), creator.getKey());
 
-        return null;
+        WellcomeEditorialCreationProcess wcp = new WellcomeEditorialCreationProcess();
+        wcp.setProcessId(process.getId());
+        wcp.setProcessName(process.getTitel());
+        WellcomeEditorialCreationResponse resp = new WellcomeEditorialCreationResponse();
+        resp.setProcess(wcp);
+        resp.setResult("success");
+        return Response.status(Response.Status.OK).entity(resp).build();
+
     }
 
     @javax.ws.rs.Path("/createeditorials")
