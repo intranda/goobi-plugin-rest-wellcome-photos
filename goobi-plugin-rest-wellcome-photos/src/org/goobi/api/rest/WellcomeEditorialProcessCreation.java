@@ -88,9 +88,9 @@ public class WellcomeEditorialProcessCreation {
     public Response uploadDataToExistingProcess(Creator creator) {
 
         String processName = creator.getKey();
-        int index = processName.lastIndexOf('/');
+        int index = processName.lastIndexOf("/");
         if (index != -1) {
-            processName.substring(index, processName.length() - 1);
+            processName = processName.substring(index + 1, processName.length());
         }
         processName = processName.replace(".zip", "");
         // exact search
