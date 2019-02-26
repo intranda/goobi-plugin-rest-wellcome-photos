@@ -25,6 +25,8 @@ import org.apache.commons.configuration.XMLConfiguration;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.SystemUtils;
+import org.goobi.api.mq.TaskTicket;
+import org.goobi.api.mq.TicketGenerator;
 import org.goobi.api.rest.response.WellcomeEditorialCreationProcess;
 import org.goobi.api.rest.response.WellcomeEditorialCreationResponse;
 import org.goobi.beans.Process;
@@ -104,53 +106,20 @@ public class WellcomeEditorialProcessCreation {
         }
         String workingStorage = System.getenv("WORKING_STORAGE");
         Path workDir = Paths.get(workingStorage, UUID.randomUUID().toString());
-        Response zipResponse = handleZipFile(creator, workDir);
-        if (zipResponse != null) {
-            return zipResponse;
-        }
-        // alto files are imported into alto directory
-        List<Path> altoFiles = new ArrayList<>();
-        // objects are imported into the master directory
-        List<Path> objectFiles = new ArrayList<>();
-
-        try (DirectoryStream<Path> folderFiles = Files.newDirectoryStream(workDir)) {
-            for (Path file : folderFiles) {
-                String fileName = file.getFileName().toString();
-                String fileNameLower = fileName.toLowerCase();
-                if (fileNameLower.endsWith(".xml") && !fileNameLower.startsWith(".")) {
-                    altoFiles.add(file);
-                } else if (!fileNameLower.startsWith(".")) {
-                    objectFiles.add(file);
-                }
-            }
-        } catch (IOException e1) {
-            log.error(e1);
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Error reading directory: " + workDir)).build();
-        }
 
         try {
-            Path imagesDir = Paths.get(process.getImagesOrigDirectory(false));
-            for (Path object : objectFiles) {
-                StorageProvider.getInstance().copyFile(object, imagesDir.resolve(object.getFileName()));
-            }
-        } catch (IOException | InterruptedException | SwapException | DAOException e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Cannot copy files to master directory"))
-                    .build();
+            TaskTicket ticket = TicketGenerator.generateSimpleTicket("downloads3");
+            ticket.setProcessId(process.getId());
+            ticket.setProcessName(process.getTitel());
+            ticket.getProperties().put("bucket", creator.getBucket());
+            ticket.getProperties().put("s3Key", creator.getKey());
+            ticket.getProperties().put("targetDir", workDir.toString());
+            ticket.getProperties().put("destination", process.getImagesOrigDirectory(false));
+            ticket.getProperties().put("deleteFiles", "true");
+            TicketGenerator.registerTicket(ticket);
+        } catch (IOException | InterruptedException | SwapException | DAOException e2) {
+            log.error(e2);
         }
-
-        try {
-            Path altoDir = Paths.get(process.getOcrAltoDirectory());
-
-            for (Path alto : altoFiles) {
-                StorageProvider.getInstance().copyFile(alto, altoDir.resolve(alto.getFileName()));
-            }
-        } catch (IOException | InterruptedException | SwapException | DAOException e) {
-            return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity(createErrorResponse("Cannot copy files to alto directory")).build();
-        }
-
-        // finally cleanup temporary files
-        FileUtils.deleteQuietly(workDir.toFile());
-        deleteFileFromS3(creator.getBucket(), creator.getKey());
 
         WellcomeEditorialCreationProcess wcp = new WellcomeEditorialCreationProcess();
         wcp.setProcessId(process.getId());
