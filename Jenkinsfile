@@ -1,9 +1,4 @@
-
-Permalink
-History
-Raw
-
-    pipeline {
+pipeline {
 
       agent {
         docker {
