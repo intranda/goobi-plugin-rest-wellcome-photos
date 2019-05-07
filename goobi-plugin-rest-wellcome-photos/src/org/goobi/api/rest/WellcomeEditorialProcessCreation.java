@@ -5,6 +5,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
 
+import javax.jms.JMSException;
 import javax.ws.rs.Consumes;
 import javax.ws.rs.POST;
 import javax.ws.rs.Produces;
@@ -61,10 +62,11 @@ public class WellcomeEditorialProcessCreation {
             ticket.getProperties().put("targetDir", workDir.toString());
             ticket.getProperties().put("destination", process.getImagesOrigDirectory(false));
             ticket.getProperties().put("deleteFiles", "true");
-            TicketGenerator.registerTicket(ticket);
-        } catch (IOException | InterruptedException | SwapException | DAOException e2) {
+            TicketGenerator.submitTicket(ticket, true);
+        } catch (IOException | InterruptedException | SwapException | DAOException | JMSException e2) {
             log.error(e2);
-            return Response.status(Response.Status.BAD_REQUEST).entity(createErrorResponse("Cannot add ticket to import data for " + processName)).build();
+            return Response.status(Response.Status.BAD_REQUEST).entity(createErrorResponse("Cannot add ticket to import data for " + processName))
+                    .build();
         }
 
         WellcomeEditorialCreationProcess wcp = new WellcomeEditorialCreationProcess();
@@ -81,7 +83,7 @@ public class WellcomeEditorialProcessCreation {
     @POST
     @Produces("text/xml")
     @Consumes("application/json")
-    public Response createNewProcess(Creator creator) {
+    public Response createNewProcess(Creator creator) throws JMSException {
         String workingStorage = System.getenv("WORKING_STORAGE");
         Path workDir = Paths.get(workingStorage, UUID.randomUUID().toString());
 
@@ -95,8 +97,6 @@ public class WellcomeEditorialProcessCreation {
 
         //        Process process = null;
 
-
-
         TaskTicket ticket = TicketGenerator.generateSimpleTicket("downloads3");
 
         ticket.getProperties().put("bucket", creator.getBucket());
@@ -107,16 +107,12 @@ public class WellcomeEditorialProcessCreation {
         ticket.getProperties().put("updateTemplateId", creator.getUpdatetemplateid() + "");
         ticket.getProperties().put("templateId", creator.getTemplateid() + "");
 
-
-        TicketGenerator.registerTicket(ticket);
-
+        TicketGenerator.submitTicket(ticket, true);
 
         //        Response zipResponse = handleZipFile(creator, workDir);
         //        if (zipResponse != null) {
         //            return zipResponse;
         //        }
-
-
 
         //        Prefs prefs = templateNew.getRegelsatz().getPreferences();
         //        log.debug("working with folder " + workDir.getFileName());
