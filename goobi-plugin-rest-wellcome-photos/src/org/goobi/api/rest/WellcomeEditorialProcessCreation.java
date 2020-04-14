@@ -111,7 +111,9 @@ public class WellcomeEditorialProcessCreation {
             ticket.getProperties().put("bucket", creator.getBucket());
             ticket.getProperties().put("s3Key", creator.getKey());
             ticket.getProperties().put("targetDir", workDir.toString());
-            ticket.getProperties().put("destination", process.getImagesOrigDirectory(false));
+            ticket.getProperties().put("destination", process.getImagesOrigDirectory(false)); // TODO remove this line after next update
+            ticket.getProperties().put("tifFolder", process.getImagesOrigDirectory(false));
+            ticket.getProperties().put("jp2Folder", process.getImagesTifDirectory(false));
             ticket.getProperties().put("deleteFiles", "true");
             TicketGenerator.submitTicket(ticket, QueueType.SLOW_QUEUE);
         } catch (IOException | InterruptedException | SwapException | DAOException | JMSException e2) {
