@@ -63,7 +63,7 @@ public class WellcomeEditorialProcessCreation {
             ticket.getProperties().put("targetDir", workDir.toString());
             ticket.getProperties().put("destination", process.getImagesTifDirectory(false));
             ticket.getProperties().put("deleteFiles", "true");
-            TicketGenerator.submitTicket(ticket, QueueType.SLOW_QUEUE);
+            TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE);
         } catch (IOException | InterruptedException | SwapException | DAOException | JMSException e2) {
             log.error(e2);
             return Response.status(Response.Status.BAD_REQUEST)
@@ -115,7 +115,7 @@ public class WellcomeEditorialProcessCreation {
             ticket.getProperties().put("tifFolder", process.getImagesOrigDirectory(false));
             ticket.getProperties().put("jp2Folder", process.getImagesTifDirectory(false));
             ticket.getProperties().put("deleteFiles", "true");
-            TicketGenerator.submitTicket(ticket, QueueType.SLOW_QUEUE);
+            TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE);
         } catch (IOException | InterruptedException | SwapException | DAOException | JMSException e2) {
             log.error(e2);
             return Response.status(Response.Status.BAD_REQUEST)
@@ -162,7 +162,7 @@ public class WellcomeEditorialProcessCreation {
         ticket.getProperties().put("updateTemplateId", creator.getUpdatetemplateid() + "");
         ticket.getProperties().put("templateId", creator.getTemplateid() + "");
 
-        TicketGenerator.submitTicket(ticket, QueueType.SLOW_QUEUE);
+        TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE);
 
         WellcomeEditorialCreationResponse resp = new WellcomeEditorialCreationResponse();
 
