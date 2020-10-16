@@ -27,6 +27,58 @@ import lombok.extern.log4j.Log4j;
 @Log4j
 public class WellcomeEditorialProcessCreation {
 
+    @javax.ws.rs.Path("/uploadaudio")
+    @POST
+    @Produces("text/xml")
+    @Consumes("application/json")
+    public Response uploadAudioDataToExistingProcess(Creator creator) {
+
+        String processName = creator.getKey();
+
+        int index = processName.lastIndexOf("/");
+        if (index != -1) {
+
+            String prefixWithoutFilename = processName.substring(0, index);
+            index = prefixWithoutFilename.lastIndexOf("/");
+            processName = prefixWithoutFilename.substring(index + 1, prefixWithoutFilename.length());
+        }
+
+        // exact search
+        Process process = ProcessManager.getProcessByExactTitle(processName);
+        if (process == null) {
+            // like search
+            process = ProcessManager.getProcessByTitle(processName);
+        }
+        if (process == null) {
+            return Response.status(Response.Status.BAD_REQUEST).entity(createErrorResponse("Cannot find process with title " + processName)).build();
+        }
+        String workingStorage = System.getenv("WORKING_STORAGE");
+        Path workDir = Paths.get(workingStorage, UUID.randomUUID().toString());
+        try {
+            TaskTicket ticket = TicketGenerator.generateSimpleTicket("importAudioData");
+            ticket.setProcessId(process.getId());
+            ticket.setProcessName(process.getTitel());
+            ticket.getProperties().put("bucket", creator.getBucket());
+            ticket.getProperties().put("s3Key", creator.getKey());
+            ticket.getProperties().put("targetDir", workDir.toString());
+            ticket.getProperties().put("destination", process.getImagesTifDirectory(false));
+            ticket.getProperties().put("deleteFiles", "true");
+            TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE);
+        } catch (IOException | InterruptedException | SwapException | DAOException | JMSException e2) {
+            log.error(e2);
+            return Response.status(Response.Status.BAD_REQUEST)
+                    .entity(createErrorResponse("Cannot add ticket to import data for " + processName))
+                    .build();
+        }
+
+        WellcomeEditorialCreationProcess wcp = new WellcomeEditorialCreationProcess();
+        wcp.setProcessId(process.getId());
+        wcp.setProcessName(process.getTitel());
+        WellcomeEditorialCreationResponse resp = new WellcomeEditorialCreationResponse();
+        resp.setProcess(wcp);
+        resp.setResult("success");
+        return Response.status(Response.Status.OK).entity(resp).build();
+    }
     @javax.ws.rs.Path("/uploadvideo")
     @POST
     @Produces("text/xml")
