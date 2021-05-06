@@ -63,7 +63,7 @@ public class WellcomeEditorialProcessCreation {
             ticket.getProperties().put("targetDir", workDir.toString());
             ticket.getProperties().put("destination", process.getImagesTifDirectory(false));
             ticket.getProperties().put("deleteFiles", "true");
-            TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE);
+            TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE, "importAudioData", 0);
         } catch (IOException | InterruptedException | SwapException | DAOException | JMSException e2) {
             log.error(e2);
             return Response.status(Response.Status.BAD_REQUEST)
@@ -79,6 +79,7 @@ public class WellcomeEditorialProcessCreation {
         resp.setResult("success");
         return Response.status(Response.Status.OK).entity(resp).build();
     }
+
     @javax.ws.rs.Path("/uploadvideo")
     @POST
     @Produces("text/xml")
@@ -115,7 +116,7 @@ public class WellcomeEditorialProcessCreation {
             ticket.getProperties().put("targetDir", workDir.toString());
             ticket.getProperties().put("destination", process.getImagesTifDirectory(false));
             ticket.getProperties().put("deleteFiles", "true");
-            TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE);
+            TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE, "importVideoData", 0);
         } catch (IOException | InterruptedException | SwapException | DAOException | JMSException e2) {
             log.error(e2);
             return Response.status(Response.Status.BAD_REQUEST)
@@ -167,7 +168,7 @@ public class WellcomeEditorialProcessCreation {
             ticket.getProperties().put("tifFolder", process.getImagesOrigDirectory(false));
             ticket.getProperties().put("jp2Folder", process.getImagesTifDirectory(false));
             ticket.getProperties().put("deleteFiles", "true");
-            TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE);
+            TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE, "downloads3", 0);
         } catch (IOException | InterruptedException | SwapException | DAOException | JMSException e2) {
             log.error(e2);
             return Response.status(Response.Status.BAD_REQUEST)
@@ -214,7 +215,7 @@ public class WellcomeEditorialProcessCreation {
         ticket.getProperties().put("updateTemplateId", creator.getUpdatetemplateid() + "");
         ticket.getProperties().put("templateId", creator.getTemplateid() + "");
 
-        TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE);
+        TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE, "downloads3Editorial", 0);
 
         WellcomeEditorialCreationResponse resp = new WellcomeEditorialCreationResponse();
 
