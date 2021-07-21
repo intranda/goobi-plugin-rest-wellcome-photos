@@ -12,7 +12,7 @@
   <properties>
     <timestamp>${maven.build.timestamp}</timestamp>
     <maven.build.timestamp.format>yyyy-MM-dd</maven.build.timestamp.format>
-    <goobi.version>21.06.6</goobi.version>
+    <goobi.version>21.06.7</goobi.version>
   </properties>
   <build>
     <finalName>plugin_rest_wellcome_photos</finalName>
@@ -75,6 +75,46 @@
           </gitDescribe>
         </configuration>
       </plugin>
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>buildnumber-maven-plugin</artifactId>
+        <version>1.4</version>
+        <executions>
+          <execution>
+            <phase>validate</phase>
+            <goals>
+              <goal>create</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <shortRevisionLength>10</shortRevisionLength>
+          <doCheck>false</doCheck>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <version>3.1.0</version>
+        <configuration>
+          <archive>
+            <manifestEntries>
+              <Build-Time>${maven.build.timestamp}</Build-Time>
+            </manifestEntries>
+            <manifestSections>
+              <manifestSection>
+                <name>Versions</name>
+                <manifestEntries>
+                  <Implementation-Version>${project.version}</Implementation-Version>
+                  <Implementation-SCM-Revision>${buildNumber}</Implementation-SCM-Revision>
+                  <Implementation-SCM-Branch>${scmBranch}</Implementation-SCM-Branch>
+                  <Goobi-Version>${goobi.version}</Goobi-Version>
+                </manifestEntries>
+              </manifestSection>
+            </manifestSections>
+          </archive>
+        </configuration>
+      </plugin>
     </plugins>
   </build>
   <dependencies>
@@ -97,5 +137,9 @@
       <version>4.12</version>
       <scope>test</scope>
     </dependency>
-  </dependencies>
+</dependencies>
+<scm>
+    <url>scm:git:ssh://git@gitea.intranda.com:goobi-workflow/goobi-plugin-rest-wellcome-photos.git</url>
+    <connection>scm:git:ssh://git@gitea.intranda.com:goobi-workflow/goobi-plugin-rest-wellcome-photos.git</connection>
+  </scm>
 </project>
