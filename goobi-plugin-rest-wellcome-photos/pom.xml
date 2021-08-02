@@ -12,7 +12,7 @@
   <properties>
     <timestamp>${maven.build.timestamp}</timestamp>
     <maven.build.timestamp.format>yyyy-MM-dd</maven.build.timestamp.format>
-    <goobi.version>21.06.7</goobi.version>
+    <goobi.version>21.07</goobi.version>
   </properties>
   <build>
     <finalName>plugin_rest_wellcome_photos</finalName>
@@ -137,8 +137,8 @@
       <version>4.12</version>
       <scope>test</scope>
     </dependency>
-</dependencies>
-<scm>
+  </dependencies>
+  <scm>
     <url>scm:git:ssh://git@gitea.intranda.com:goobi-workflow/goobi-plugin-rest-wellcome-photos.git</url>
     <connection>scm:git:ssh://git@gitea.intranda.com:goobi-workflow/goobi-plugin-rest-wellcome-photos.git</connection>
   </scm>
