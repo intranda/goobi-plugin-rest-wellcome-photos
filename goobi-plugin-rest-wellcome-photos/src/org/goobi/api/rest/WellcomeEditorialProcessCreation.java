@@ -210,7 +210,7 @@ public class WellcomeEditorialProcessCreation {
         ticket.getProperties().put("bucket", creator.getBucket());
         ticket.getProperties().put("s3Key", creator.getKey());
         ticket.getProperties().put("targetDir", workDir.toString());
-        ticket.getProperties().put("deleteFiles", "true");
+        ticket.getProperties().put("deleteFiles", "false");
 
         ticket.getProperties().put("updateTemplateId", creator.getUpdatetemplateid() + "");
         ticket.getProperties().put("templateId", creator.getTemplateid() + "");
