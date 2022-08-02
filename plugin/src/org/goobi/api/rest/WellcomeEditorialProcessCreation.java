@@ -64,7 +64,7 @@ public class WellcomeEditorialProcessCreation {
             ticket.getProperties().put("destination", process.getImagesTifDirectory(false));
             ticket.getProperties().put("deleteFiles", "true");
             TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE, "importAudioData", 0);
-        } catch (IOException | InterruptedException | SwapException | DAOException | JMSException e2) {
+        } catch (IOException | SwapException | JMSException e2) {
             log.error(e2);
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(createErrorResponse("Cannot add ticket to import data for " + processName))
@@ -117,7 +117,7 @@ public class WellcomeEditorialProcessCreation {
             ticket.getProperties().put("destination", process.getImagesTifDirectory(false));
             ticket.getProperties().put("deleteFiles", "true");
             TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE, "importVideoData", 0);
-        } catch (IOException | InterruptedException | SwapException | DAOException | JMSException e2) {
+        } catch (IOException | SwapException | JMSException e2) {
             log.error(e2);
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(createErrorResponse("Cannot add ticket to import data for " + processName))
@@ -169,7 +169,7 @@ public class WellcomeEditorialProcessCreation {
             ticket.getProperties().put("jp2Folder", process.getImagesTifDirectory(false));
             ticket.getProperties().put("deleteFiles", "true");
             TicketGenerator.submitInternalTicket(ticket, QueueType.SLOW_QUEUE, "downloads3", 0);
-        } catch (IOException | InterruptedException | SwapException | DAOException | JMSException e2) {
+        } catch (IOException | SwapException | DAOException | JMSException e2) {
             log.error(e2);
             return Response.status(Response.Status.BAD_REQUEST)
                     .entity(createErrorResponse("Cannot add ticket to import data for " + processName))
