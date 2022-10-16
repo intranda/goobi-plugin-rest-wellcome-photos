@@ -12,7 +12,7 @@
   <properties>
     <timestamp>${maven.build.timestamp}</timestamp>
     <maven.build.timestamp.format>yyyy-MM-dd</maven.build.timestamp.format>
-    <goobi.version>22.09.1</goobi.version>
+    <goobi.version>22.09.2</goobi.version>
   </properties>
   <build>
     <finalName>plugin_rest_wellcome_photos</finalName>
