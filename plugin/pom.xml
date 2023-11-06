@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   <groupId>goobi.plugin.rest</groupId>
   <artifactId>wellcome.photos</artifactId>
-  <version>23.08</version>
+  <version>23.10</version>
   <repositories>
     <repository>
       <id>intranda-public</id>
@@ -12,7 +12,7 @@
   <properties>
     <timestamp>${maven.build.timestamp}</timestamp>
     <maven.build.timestamp.format>yyyy-MM-dd</maven.build.timestamp.format>
-    <goobi.version>23.08</goobi.version>
+    <goobi.version>23.10</goobi.version>
   </properties>
   <build>
     <finalName>plugin_rest_wellcome_photos</finalName>
