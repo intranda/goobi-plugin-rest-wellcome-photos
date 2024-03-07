@@ -7,7 +7,7 @@
     <relativePath />
   </parent>
   <groupId>io.goobi.workflow.plugin</groupId>
-  <artifactId>plugin-rest-wellcome.photos</artifactId>
+  <artifactId>plugin-rest-wellcome-photos</artifactId>
   <packaging>pom</packaging>
   <modules>
     <module>module-base</module>
