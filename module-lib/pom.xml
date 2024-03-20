@@ -5,6 +5,6 @@
     <artifactId>plugin-rest-wellcome-photos</artifactId>
     <version>24.03-SNAPSHOT</version>
   </parent>
-  <artifactId>plugin-rest-wellcome-photos-base</artifactId>
+  <artifactId>plugin-rest-wellcome-photos-lib</artifactId>
   <packaging>jar</packaging>
 </project>

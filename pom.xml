@@ -10,7 +10,8 @@
   <artifactId>plugin-rest-wellcome-photos</artifactId>
   <packaging>pom</packaging>
   <modules>
-    <module>module-base</module>
+    <module>module-api</module>
+    <module>module-lib</module>
   </modules>
   <repositories>
     <repository>
