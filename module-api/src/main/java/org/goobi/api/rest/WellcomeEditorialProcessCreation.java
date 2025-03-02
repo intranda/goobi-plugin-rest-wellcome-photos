@@ -5,10 +5,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.UUID;
 
-import javax.ws.rs.Consumes;
-import javax.ws.rs.POST;
-import javax.ws.rs.Produces;
-import javax.ws.rs.core.Response;
+import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.POST;
+import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.core.Response;
 
 import org.goobi.api.mq.QueueType;
 import org.goobi.api.mq.TaskTicket;
@@ -23,11 +23,11 @@ import de.sub.goobi.persistence.managers.ProcessManager;
 import jakarta.jms.JMSException;
 import lombok.extern.log4j.Log4j;
 
-@javax.ws.rs.Path("/wellcome")
+@jakarta.ws.rs.Path("/wellcome")
 @Log4j
 public class WellcomeEditorialProcessCreation {
 
-    @javax.ws.rs.Path("/uploadaudio")
+    @jakarta.ws.rs.Path("/uploadaudio")
     @POST
     @Produces("text/xml")
     @Consumes("application/json")
@@ -80,7 +80,7 @@ public class WellcomeEditorialProcessCreation {
         return Response.status(Response.Status.OK).entity(resp).build();
     }
 
-    @javax.ws.rs.Path("/uploadvideo")
+    @jakarta.ws.rs.Path("/uploadvideo")
     @POST
     @Produces("text/xml")
     @Consumes("application/json")
@@ -133,7 +133,7 @@ public class WellcomeEditorialProcessCreation {
         return Response.status(Response.Status.OK).entity(resp).build();
     }
 
-    @javax.ws.rs.Path("/uploadzip")
+    @jakarta.ws.rs.Path("/uploadzip")
     @POST
     @Produces("text/xml")
     @Consumes("application/json")
@@ -186,7 +186,7 @@ public class WellcomeEditorialProcessCreation {
 
     }
 
-    @javax.ws.rs.Path("/createeditorials")
+    @jakarta.ws.rs.Path("/createeditorials")
     @POST
     @Produces("text/xml")
     @Consumes("application/json")
